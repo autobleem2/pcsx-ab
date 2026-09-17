@@ -44,6 +44,7 @@ option(PCSXAB_DYNAREC     "Ari64's MIPS->ARM recompiler. ARM only, and the only 
 option(PCSXAB_PLUGINS     "Also build the loadable plugins (gpu_peops, gpu_unai, spunull [, gpu_gles])" ON)
 option(PCSXAB_GLES        "OpenGL ES output through EGL on a Wayland surface (the PlayStation Classic's Weston). Off means video goes through an SDL2 renderer + streaming texture - what a Raspberry Pi on KMSDRM uses" OFF)
 option(PCSXAB_LINK_MAP    "Write pcsx-ab.map next to the executable (the Makefile always did)" ON)
+option(PCSXAB_CHD         "CHD disc images, via the vendored libmamecd (static: FLAC, lzma, zlib come with it)" ON)
 set(PCSXAB_BUILTIN_GPU "" CACHE STRING "GPU compiled into the executable: neon, peops or unai (empty = neon with NEON, else peops)")
 set_property(CACHE PCSXAB_BUILTIN_GPU PROPERTY STRINGS "" neon peops unai)
 set(PCSXAB_SOUND_DRIVERS "sdl" CACHE STRING "Space-separated SPU output drivers: sdl alsa oss pulseaudio")
@@ -269,9 +270,19 @@ set_source_files_properties(plugins/dfsound/out.c PROPERTIES COMPILE_DEFINITIONS
 
 set_source_files_properties(libpcsxcore/psxbios.c PROPERTIES COMPILE_OPTIONS -Wno-nonnull)
 
+if (PCSXAB_CHD)
+    # mamecd and the codecs it decompresses with (FLAC, lzma, its own inflate) are static, from
+    # third_party/libmamecd/deps - a CHD build adds no shared library to what the Pi or the console must
+    # have. The system zlib stays for the emulator's own gz*() save-state I/O (the vendored copy carries only
+    # the inflate/deflate core); libpng needs libz on every target anyway.
+    add_subdirectory(third_party/libmamecd EXCLUDE_FROM_ALL)
+    set_source_files_properties(libpcsxcore/cdriso.c PROPERTIES COMPILE_DEFINITIONS HAVE_CHD)
+    set(_pcsxab_chd_libs mamecd)
+endif()
+
 add_executable(pcsx-ab ${PCSXAB_SOURCES})
 target_include_directories(pcsx-ab PRIVATE ${_pcsxab_sdl_inc_both})
-target_link_libraries(pcsx-ab PRIVATE SDL2::SDL2 PNG::PNG ZLIB::ZLIB Threads::Threads
+target_link_libraries(pcsx-ab PRIVATE ${_pcsxab_chd_libs} SDL2::SDL2 PNG::PNG ZLIB::ZLIB Threads::Threads
     ${CMAKE_DL_LIBS} m ${_pcsxab_sound_libs} ${_pcsxab_gles_libs})
 if (WIN32)
     # SDL's own main() wrapper is not wanted (frontend/main.c has the real one); winsock for the gdb stub

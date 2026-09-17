@@ -64,7 +64,12 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
 ```
 
 Options (`cmake -L`): `PCSXAB_ENABLE_MENU`, `PCSXAB_NEON`, `PCSXAB_DYNAREC`, `PCSXAB_BUILTIN_GPU` (neon/peops/unai),
-`PCSXAB_SOUND_DRIVERS` (sdl alsa oss pulseaudio), `PCSXAB_GLES`, `PCSXAB_PLUGINS`, `PCSXAB_LINK_MAP`.
+`PCSXAB_SOUND_DRIVERS` (sdl alsa oss pulseaudio), `PCSXAB_GLES`, `PCSXAB_PLUGINS`, `PCSXAB_LINK_MAP`, `PCSXAB_CHD`.
+
+**CHD images** (`PCSXAB_CHD`, on by default): `.chd` discs from `chdman createcd` load like any other image
+(`-cdfile game.chd`), multi-track with CD audio included. The reader is `handlechd`/`cdread_chd` in
+`libpcsxcore/cdriso.c` on top of the vendored `third_party/libmamecd` (a libchdr fork, BSD), built static
+with its FLAC/lzma codecs so no extra library is needed on the console or the Pi.
 
 **Status:** the Pi cross build compiles and links against exactly the libraries a stock Pi OS has
 (`libSDL2-2.0.so.0`, `libpng16`, `libz`) but has not yet been run on a Pi. The SDL2 renderer video path it

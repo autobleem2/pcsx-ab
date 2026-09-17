@@ -9,14 +9,11 @@
 get_filename_component(_pcsxab_devkit_include "${CMAKE_CURRENT_LIST_DIR}/../devkit/include" ABSOLUTE)
 set(_pcsxab_sysroot_libdir "${CMAKE_SYSROOT}/usr/lib/arm-linux-gnueabihf")
 
-find_package(ZLIB REQUIRED)   # the sysroot has zlib.h and libz.so, so the stock module finds those
-
 if (NOT TARGET PNG::PNG)
     add_library(PNG::PNG UNKNOWN IMPORTED)
     set_target_properties(PNG::PNG PROPERTIES
         IMPORTED_LOCATION "${_pcsxab_sysroot_libdir}/libpng16.so.16"
         INTERFACE_INCLUDE_DIRECTORIES "${_pcsxab_devkit_include}"
-        INTERFACE_LINK_LIBRARIES ZLIB::ZLIB
     )
 endif()
 

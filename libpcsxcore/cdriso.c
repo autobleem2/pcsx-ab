@@ -30,7 +30,9 @@
 #include <process.h>
 #include <windows.h>
 #define strcasecmp _stricmp
-#ifndef __MINGW32__
+#ifdef __MINGW32__
+#include <unistd.h>	/* usleep */
+#else
 #define usleep(x) Sleep((x) / 1000)
 #endif
 #else
@@ -96,6 +98,7 @@ static struct {
 
 int (*cdimg_read_func)(FILE *f, unsigned int base, void *dest, int sector);
 
+
 char* CALLBACK CDR__getDriveLetter(void);
 long CALLBACK CDR__configure(void);
 long CALLBACK CDR__test(void);
@@ -117,6 +120,40 @@ struct trackinfo {
 
 static int numtracks = 0;
 static struct trackinfo ti[MAXTRACKS];
+
+#ifdef HAVE_CHD
+/* MAME CHD images (chdman createcd), read through the vendored libmamecd (third_party/libmamecd).
+ *
+ * A CD CHD is a stream of 2448-byte units - 2352 bytes of raw sector + 96 of subcode - grouped into
+ * hunks, with the tracks stored one after another and each padded to a multiple of 4 frames. The
+ * track table comes from the CHT2/CHTR metadata. A track's pregap is either in the stored data
+ * (PGTYPE "V..." - what a cue's INDEX 00 produces) or virtual (a plain PREGAP command): a virtual
+ * pregap occupies LBAs but no frames, so reading it returns silence. That mapping from the
+ * bin-relative LBA the rest of cdriso.c uses to a CHD frame is what chd_track[] holds.
+ *
+ * Audio is stored big-endian (MAME's convention), hence cddaBigEndian. One hunk is cached; the CDDA
+ * thread and the emulator read through the same cache, so a lock guards it. */
+#include <libmamecd/chd.h>
+#include <pthread.h>
+
+#define CHD_UNIT_BYTES (CD_FRAMESIZE_RAW + SUB_FRAMESIZE)
+#define CHD_TRACK_PADDING 4
+
+static struct {
+	chd_file *chd;
+	const chd_header *header;
+	unsigned char *hunk;			/* header->hunkbytes */
+	unsigned int sectors_per_hunk;
+	unsigned int current_hunk;
+	pthread_mutex_t lock;
+	struct {
+		unsigned int lba;		/* bin-relative LBA of the first stored frame */
+		unsigned int frames;		/* stored frames */
+		unsigned int chd_frame;	/* CHD frame index of the first stored frame */
+	} track[MAXTRACKS];
+	int subcode;				/* 0 none, 1 cooked ("RW"), 2 interleaved ("RW_RAW") */
+} *chd_img;
+#endif
 
 // get a sector from a msf-array
 static unsigned int msf2sec(char *msf) {
@@ -1031,6 +1068,109 @@ fail_io:
 	return -1;
 }
 
+#ifdef HAVE_CHD
+static int handlechd(const char *isofile) {
+	unsigned int phys = 0, lba = 0;
+	const char *ext = NULL;
+	int i;
+
+	if (strlen(isofile) >= 4)
+		ext = isofile + strlen(isofile) - 4;
+	if (ext == NULL || strcasecmp(ext, ".chd") != 0)
+		return -1;
+
+	chd_img = calloc(1, sizeof(*chd_img));
+	if (chd_img == NULL)
+		return -1;
+
+	if (chd_open(isofile, CHD_OPEN_READ, NULL, &chd_img->chd) != CHDERR_NONE) {
+		SysPrintf("chd_open failed\n");
+		goto fail;
+	}
+	chd_img->header = chd_get_header(chd_img->chd);
+	if (chd_img->header->unitbytes != CHD_UNIT_BYTES) {
+		SysPrintf("not a CD CHD: unitbytes %u\n", chd_img->header->unitbytes);
+		goto fail;
+	}
+	chd_img->hunk = malloc(chd_img->header->hunkbytes);
+	if (chd_img->hunk == NULL)
+		goto fail;
+	chd_img->sectors_per_hunk = chd_img->header->hunkbytes / CHD_UNIT_BYTES;
+	chd_img->current_hunk = (unsigned int)-1;
+	pthread_mutex_init(&chd_img->lock, NULL);
+
+	numtracks = 0;
+	memset(&ti, 0, sizeof(ti));
+	for (i = 0; i < MAXTRACKS - 1; i++) {
+		char meta[256], type[64], subtype[32], pgtype[32], pgsub[32];
+		unsigned int track = 0, frames = 0, pregap = 0, postgap = 0, meta_len = 0, stored_pregap;
+
+		type[0] = subtype[0] = pgtype[0] = pgsub[0] = 0;
+		if (chd_get_metadata(chd_img->chd, CDROM_TRACK_METADATA2_TAG, i, meta, sizeof(meta),
+				&meta_len, NULL, NULL) == CHDERR_NONE) {
+			if (sscanf(meta, CDROM_TRACK_METADATA2_FORMAT, &track, type, subtype, &frames,
+					&pregap, pgtype, pgsub, &postgap) != 8)
+				break;
+		}
+		else if (chd_get_metadata(chd_img->chd, CDROM_TRACK_METADATA_TAG, i, meta, sizeof(meta),
+				&meta_len, NULL, NULL) == CHDERR_NONE) {
+			if (sscanf(meta, CDROM_TRACK_METADATA_FORMAT, &track, type, subtype, &frames) != 4)
+				break;
+		}
+		else
+			break;
+		if (track != (unsigned int)i + 1 || frames == 0)
+			break;
+
+		/* a pregap whose type starts with V is stored in the track's frames; any other is virtual */
+		stored_pregap = (pgtype[0] == 'V') ? pregap : 0;
+		if (stored_pregap > frames)
+			stored_pregap = frames;
+		lba += pregap - stored_pregap;
+
+		numtracks = track;
+		chd_img->track[track].lba = lba;
+		chd_img->track[track].frames = frames;
+		chd_img->track[track].chd_frame = phys;
+
+		ti[track].type = strncmp(type, "AUDIO", 5) == 0 ? CDDA : DATA;
+		/* INDEX 01 is where the stored pregap ends; start is absolute (2 s lead-in), offset in bytes */
+		sec2msf(lba + stored_pregap + 2 * 75, ti[track].start);
+		ti[track].start_offset = (lba + stored_pregap) * CD_FRAMESIZE_RAW;
+		if (track > 1)
+			sec2msf(msf2sec(ti[track].start) - msf2sec(ti[track - 1].start), ti[track - 1].length);
+		sec2msf(frames - stored_pregap, ti[track].length);
+
+		if (strcmp(subtype, "RW") == 0)
+			chd_img->subcode = 1;
+		else if (strcmp(subtype, "RW_RAW") == 0)
+			chd_img->subcode = 2;
+
+		lba += frames + postgap;
+		phys += (frames + CHD_TRACK_PADDING - 1) & ~(CHD_TRACK_PADDING - 1);
+	}
+	if (numtracks == 0) {
+		SysPrintf("chd: no track metadata\n");
+		goto fail;
+	}
+
+	cddaBigEndian = TRUE;
+	if (chd_img->subcode) {
+		subChanMixed = TRUE;
+		subChanRaw = chd_img->subcode == 2;
+	}
+	return 0;
+
+fail:
+	if (chd_img->chd != NULL)
+		chd_close(chd_img->chd);
+	free(chd_img->hunk);
+	free(chd_img);
+	chd_img = NULL;
+	return -1;
+}
+#endif
+
 // this function tries to get the .sub file of the given .img
 static int opensubfile(const char *isoname) {
 	char		subname[MAXPATHLEN];
@@ -1192,6 +1332,58 @@ finish:
 	return CD_FRAMESIZE_RAW;
 }
 
+#ifdef HAVE_CHD
+/* base is a byte offset like the other readers' (ISOplay hands it ti[].start_offset) */
+static int cdread_chd(FILE *f, unsigned int base, void *dest, int sector)
+{
+	unsigned int frame, hunk;
+	const unsigned char *unit;
+	int i;
+
+	if (base)
+		sector += base / CD_FRAMESIZE_RAW;
+	if (sector < 0)
+		return -1;
+
+	for (i = 1; i <= numtracks; i++) {
+		if ((unsigned int)sector < chd_img->track[i].lba) {
+			/* a virtual pregap: not in the image, comes back silent */
+			memset(dest, 0, CD_FRAMESIZE_RAW);
+			if (subChanMixed)
+				memset(subbuffer, 0, SUB_FRAMESIZE);
+			return CD_FRAMESIZE_RAW;
+		}
+		if ((unsigned int)sector < chd_img->track[i].lba + chd_img->track[i].frames)
+			break;
+	}
+	if (i > numtracks)
+		return -1;
+	frame = chd_img->track[i].chd_frame + (sector - chd_img->track[i].lba);
+	hunk = frame / chd_img->sectors_per_hunk;
+	if (hunk >= chd_img->header->totalhunks)
+		return -1;
+
+	pthread_mutex_lock(&chd_img->lock);
+	if (hunk != chd_img->current_hunk) {
+		if (chd_read(chd_img->chd, hunk, chd_img->hunk) != CHDERR_NONE) {
+			chd_img->current_hunk = (unsigned int)-1;
+			pthread_mutex_unlock(&chd_img->lock);
+			return -1;
+		}
+		chd_img->current_hunk = hunk;
+	}
+	unit = chd_img->hunk + (frame % chd_img->sectors_per_hunk) * CHD_UNIT_BYTES;
+	memcpy(dest, unit, CD_FRAMESIZE_RAW);
+	if (subChanMixed)
+		memcpy(subbuffer, unit + CD_FRAMESIZE_RAW, SUB_FRAMESIZE);
+	pthread_mutex_unlock(&chd_img->lock);
+
+	if (subChanMixed && subChanRaw)
+		DecodeRawSubData();
+	return CD_FRAMESIZE_RAW;
+}
+#endif
+
 static int cdread_2048(FILE *f, unsigned int base, void *dest, int sector)
 {
 	int ret;
@@ -1278,6 +1470,12 @@ static long CALLBACK ISOopen(void) {
 		CDR_getBuffer = ISOgetBuffer_compr;
 		cdimg_read_func = cdread_compressed;
 	}
+#ifdef HAVE_CHD
+	else if (handlechd(GetIsoFile()) == 0) {
+		SysPrintf("[chd]");
+		cdimg_read_func = cdread_chd;
+	}
+#endif
 
 	if (!subChanMixed && opensubfile(GetIsoFile()) == 0) {
 		SysPrintf("[+otf]");
@@ -1315,8 +1513,8 @@ static long CALLBACK ISOopen(void) {
 		}
 	}
 
-	// guess whether it is mode1/2048
-	if (ftello(cdHandle) % 2048 == 0) {
+	// guess whether it is mode1/2048 - only for a plain image; a container's size says nothing
+	if (cdimg_read_func == cdread_normal && ftello(cdHandle) % 2048 == 0) {
 		unsigned int modeTest = 0;
 		fseek(cdHandle, 0, SEEK_SET);
 		fread(&modeTest, 4, 1, cdHandle);
@@ -1331,10 +1529,12 @@ static long CALLBACK ISOopen(void) {
 
 	PrintTracks();
 
-	if (subChanMixed)
-		cdimg_read_func = cdread_sub_mixed;
-	else if (isMode1ISO)
-		cdimg_read_func = cdread_2048;
+	if (cdimg_read_func == cdread_normal) {
+		if (subChanMixed)
+			cdimg_read_func = cdread_sub_mixed;
+		else if (isMode1ISO)
+			cdimg_read_func = cdread_2048;
+	}
 
 	// make sure we have another handle open for cdda
 	if (numtracks > 1 && ti[1].handle == NULL) {
@@ -1365,6 +1565,15 @@ static long CALLBACK ISOclose(void) {
 		free(compr_img);
 		compr_img = NULL;
 	}
+#ifdef HAVE_CHD
+	if (chd_img != NULL) {
+		chd_close(chd_img->chd);
+		pthread_mutex_destroy(&chd_img->lock);
+		free(chd_img->hunk);
+		free(chd_img);
+		chd_img = NULL;
+	}
+#endif
 
 	for (i = 1; i <= numtracks; i++) {
 		if (ti[i].handle != NULL) {
