@@ -35,11 +35,19 @@ frame is uploaded to a streaming texture and scaled on the GPU by SDL's KMSDRM/G
 (`plat_sdl_present()` in `frontend/libpicofe/plat_sdl.c`); `-ratio` pillarboxes to 4:3, `-filter` picks
 linear/nearest, exactly as the console's GL path does.
 
-**PlayStation Classic** - Sony's toolchain, `PCSXAB_GLES=ON` (the old `config.mak.autobleem`):
+**PlayStation Classic** - Sony's toolchain, `PCSXAB_GLES=ON` (what the old `config.mak.autobleem` did:
+EGL on the Weston surface SDL hands over, `gpu_gles.so` included). The toolchain lives on the build server,
+so this one builds over ssh:
 
 ```bash
-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=toolchains/psc/PSCtoolchainV8.cmake -B build_psc
-cmake --build build_psc
+./make_psc.sh                    # rsync up, build there with toolchains/psc/PSCtoolchainV8.cmake, fetch
+```
+
+Result: `build_psc/dist/` (stripped `pcsx-ab` + `plugins/`). Needs a `Host psc-build` entry in
+`~/.ssh/config` with key login. On a machine that has the toolchain locally:
+
+```bash
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=toolchains/psc/PSCtoolchainV8.cmake       -DPCSXAB_PSC_TOOLCHAIN=/opt/toolchain -B build_psc && cmake --build build_psc
 ```
 
 **Windows development build (MSYS2 UCRT64 / MinGW)** - for running the frontend on the PC, the way

@@ -12,7 +12,7 @@ change (commit messages are prose).
 | Build system | CMake + Ninja (`CMakeLists.txt`); upstream `configure`/Makefiles deleted |
 | Raspberry Pi cross build | `./make_rpi.sh` -> `build_rpi/dist/` - builds, links, **never run on a Pi** |
 | Windows dev build | `./make_win.sh` -> `build_win/pcsx-ab.exe` - runs games (interpreter, peops GPU) |
-| PlayStation Classic | `toolchains/psc/PSCtoolchainV8.cmake` - untested, Sony toolchain not on this host |
+| PlayStation Classic | `./make_psc.sh` -> `build_psc/dist/` via the build server - builds and links with the GLES/Wayland path; **not yet run on a console** |
 | Video on the Pi | SDL2 renderer + streaming texture (`plat_sdl_present`), no Wayland/GLES - proven on Windows |
 | Gamepad | SDL2 GameController driver (`in_sdl2gc.c`) - proven on Windows with an Xbox pad |
 | CHD images | `handlechd`/`cdread_chd` over vendored static libmamecd - frame-exact vs bins; CDDA-by-ear untested |
@@ -35,10 +35,12 @@ change (commit messages are prose).
 
 ```
 CMakeLists.txt              the whole build; PCSXAB_* options replace configure's guesses
-make_rpi.sh / make_win.sh   the two builds (MSYS2 UCRT64 shell; ucrt64/bin on PATH for cmake/ninja)
+make_rpi.sh / make_win.sh   the local builds (MSYS2 UCRT64 shell; ucrt64/bin on PATH for cmake/ninja)
+make_psc.sh                 the console build, on the build server over ssh (see "Build server")
 toolchains/rpi/             RPitoolchain.cmake + devkit/ (SDL2 + libpng headers, hand-written Linux
                             SDL_config.h) + cmake/Find{SDL2,PNG}.cmake - the sysroot has runtime .so's, no -dev
-toolchains/psc/             PSCtoolchainV8.cmake (config.mak.autobleem as CMake)
+toolchains/psc/             PSCtoolchainV8.cmake (config.mak.autobleem as CMake) + cmake/FindSDL2.cmake, which
+                            copies the sysroot's SDL2 2.0.4 headers into the build tree with X11 undefined
 frontend/                   PCSX-ReARMed frontend: main.c, menu.c, plat_sdl.c, plugin_lib.c (+AB additions)
 frontend/libpicofe/         notaz's platform lib: plat_sdl.c (video, renderer path), in_sdl.c (keyboard),
                             in_sdl2gc.c (pads), input.c, menu.c; linux/ (plat.c, in_evdev.c) on the targets
@@ -68,6 +70,16 @@ Test material on this machine: `D:\AB\Games` (cue/bin, PBP, and CHDs: Abe2, WipE
 CDDA, Geppy-X, Resident Evil 2, Tomb Raider II), `D:\AB\Games (copy)\MDK (US)` (30-track cue). Re-Volt's
 EBOOT.PBP and MDK were the first games run. A gamepad log line to look for: `sdl2gc:Probed controller`.
 
+## Build server (PlayStation Classic)
+
+`ssh psc-build` (a `Host` entry in `~/.ssh/config`, in both the Windows profile and `C:\msys64\home\<you>` -
+MSYS2's ssh and Git for Windows' ssh have different homes; key `~/.ssh/id_ed25519`, installed on the server
+2026-09-17). Ubuntu x86_64, 2 cores, Sony's crosstool-NG toolchain at `/opt/toolchain` (GCC 8.2.0, sysroot
+`/opt/toolchain/armv8-sony-linux-gnueabihf/sysroot` with SDL2 2.0.4, libpng 1.6.28, zlib 1.2.8, EGL/GLES,
+Wayland dev files). The distro CMake is 3.10; `~/opt/cmake` (3.31) is what `make_psc.sh` uses. The tree is
+synced to `~/pcsx-ab`, built in `~/pcsx-ab/build_psc` (unstripped binaries stay there for gdb). No ninja
+there - Unix Makefiles, `-j2`.
+
 ## Things learned the hard way
 
 - **GCC 14 vs Sony's GCC 8**: `-fcommon` is required (tentative definitions in headers, `.comm` in
@@ -76,6 +88,12 @@ EBOOT.PBP and MDK were the first games run. A gamepad log line to look for: `sdl
 - **Source files are CRLF with tabs.** Edit by exact-string or line-range replacement in a Python script
   (normalise CRLF, restore on write); bash heredocs mangle backslashes and quotes in this environment - use
   the Write tool for new files and for scripts containing C string literals.
+- **`CMAKE_TRY_COMPILE_PLATFORM_VARIABLES`**: a toolchain file's own `-D` variables are invisible inside CMake's
+  try_compile sandboxes unless listed there - the compiler probe silently used the default path.
+- **The console sysroot's `SDL_config.h` defines `SDL_VIDEO_DRIVER_X11`** but has no X11 headers; and X11 being
+  defined would compile the Wayland handoff in `plat_sdl.c` *out*. The PSC FindSDL2 copies the headers with
+  that define removed - the original build evidently had headers without it.
+- **rsync onto NTFS from MSYS2** fails setting POSIX modes; results come back through a tar pipe.
 - **A window has a surface or a renderer, never both** (SDL >= 2.28 refuses). The non-GL path never calls
   `SDL_GetWindowSurface`; the GL branch still does, but is unreachable when `HAVE_GLES` is off.
 - **`SDL_CONTROLLER_BUTTON_MAX` grew** (15 -> 21 in 2.0.14+): a "0 = unmapped" default in
