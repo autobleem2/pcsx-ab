@@ -1,0 +1,9 @@
+# normalise line endings in the repo; the tree came out of the console SDK with CRLF sources
+* text=auto
+*.sh text eol=lf
+*.cmake text eol=lf
+CMakeLists.txt text eol=lf
+*.S text eol=lf
+*.s text eol=lf
+*.png binary
+*.pcf binary
