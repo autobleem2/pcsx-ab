@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <SDL.h>
+#include <SDL2/SDL.h>
 
 #include "input.h"
 #include "plat.h"
@@ -249,7 +249,7 @@ void in_probe(void)
 
 	for (i = 0; i < in_dev_count; i++)
 		in_unprobe(&in_devices[i]);
-	SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
+	//SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
 	for (i = 0; i < in_driver_count; i++) {
 		in_probe_dev_id = i;
 		in_drivers[i].probe(&DRV(i));
@@ -1035,11 +1035,17 @@ typedef int bool;
 #define false 0
 
 bool bIsValidHotPlugEvent(SDL_Event *arg_pEvent) {
+    /*
 	bool bRet = false;
+    if((arg_pEvent->jdevice.type == SDL_CONTROLLERDEVICEADDED) ||
+       (arg_pEvent->jdevice.type == SDL_CONTROLLERDEVICEREMOVED)) {
+        bRet = true;
+    }
 
-	if((arg_pEvent->jdevice.type == SDL_JOYDEVICEADDED) ||
+    if((arg_pEvent->jdevice.type == SDL_JOYDEVICEADDED) ||
 	   (arg_pEvent->jdevice.type == SDL_JOYDEVICEREMOVED)) {
 		bRet = true;
 	}
-	return bRet;
+     */
+	return false;
 }

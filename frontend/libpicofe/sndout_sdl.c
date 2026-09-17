@@ -9,7 +9,7 @@
  * See the COPYING file in the top-level directory.
  */
 
-#include <SDL.h>
+#include <SDL2/SDL.h>
 #include "sndout_sdl.h"
 
 // ~1/3s at 44kHz

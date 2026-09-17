@@ -39,9 +39,9 @@
 #define HUD_HEIGHT 10
 
 int in_type1, in_type2;
-int in_a1[2] = { 127, 127 }, in_a2[2] = { 127, 127 };
-int in_adev[2] = { -1, -1 }, in_adev_axis[2][2] = {{ 0, 1 }, { 0, 1 }};
-int in_adev_is_nublike[2];
+int in_a1[2] = { 127, 127 }, in_a2[2] = { 127, 127 },in2_a1[2] = { 127, 127 }, in2_a2[2] = { 127, 127 };
+int in_adev[4] = { -1, -1, -1,-1 }, in_adev_axis[4][2] = {{ 0, 1 }, { 2, 3 },{ 0, 1 }, { 2, 3 }};
+int in_adev_is_nublike[4];
 int in_keystate, in_state_gun;
 int in_enable_vibration;
 void *tsdev;
@@ -713,11 +713,11 @@ static void update_analog_nub_adjust(int *x_, int *y_)
 
 static void update_analogs(void)
 {
-	int *nubp[2] = { in_a1, in_a2 };
+	int *nubp[4] = { in_a1, in_a2, in2_a1,in2_a2 };
 	int vals[2];
 	int i, a, v, ret;
 
-	for (i = 0; i < 2; i++)
+	for (i = 0; i < 4; i++)
 	{
 		if (in_adev[i] < 0)
 			continue;
@@ -752,7 +752,7 @@ static void update_input(void)
 	unsigned int emu_act;
 
 	in_update(actions);
-	if (in_type1 == PSE_PAD_TYPE_ANALOGPAD)
+	if ((in_type1 == PSE_PAD_TYPE_ANALOGPAD) || (in_type2 == PSE_PAD_TYPE_ANALOGPAD))
 		update_analogs();
 	emu_act = actions[IN_BINDTYPE_EMU];
 	in_state_gun = (emu_act & SACTION_GUN_MASK) >> SACTION_GUN_TRIGGER;

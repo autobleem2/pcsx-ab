@@ -407,6 +407,8 @@ int plat_sdl_init(void)
 #if SDL_MAJOR_VERSION == 2
   printf("plat_sdl_init() : SDL_Init(SDL_INIT_VIDEO), %d\n", SDL_INIT_VIDEO);
   ret = SDL_Init(SDL_INIT_VIDEO);
+  SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
+  SDL_InitSubSystem(SDL_INIT_JOYSTICK);
 #else
   ret = SDL_Init(SDL_INIT_VIDEO | SDL_INIT_NOPARACHUTE);
 #endif
@@ -427,6 +429,9 @@ int plat_sdl_init(void)
   }
   SDL_GetWindowSize(sdl2_window, &fs_w, &fs_h);
   printf("SDL_GetWindowSize w=%d,h=%d\n", fs_w, fs_h);
+  SDL_ShowCursor(SDL_DISABLE);
+  SDL_SetWindowGrab(sdl2_window, SDL_TRUE);
+  SDL_SetRelativeMouseMode(SDL_TRUE);
 
 #ifndef HAVE_GLES
   /* no GL: everything is presented through the renderer, so make it now and fail early if we can't */

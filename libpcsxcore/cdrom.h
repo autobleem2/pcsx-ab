@@ -31,6 +31,8 @@ extern "C" {
 #include "psxmem.h"
 #include "psxhw.h"
 
+#include "title.h"
+
 #define btoi(b)     ((b) / 16 * 10 + (b) % 16) /* BCD to u_char */
 #define itob(i)     ((i) / 10 * 16 + (i) % 10) /* u_char to BCD */
 
@@ -135,6 +137,9 @@ void cdrWrite2(unsigned char rt);
 void cdrWrite3(unsigned char rt);
 int cdrFreeze(void *f, int Mode);
 
+void check_scenes(unsigned char arg1, unsigned char arg2, unsigned char arg3);
+void check_scenesforSPU(unsigned char arg1, unsigned char arg2, unsigned char arg3);
+int isTitleName(enum TITLE_NAME argTitleName);
 #ifdef __cplusplus
 }
 #endif

@@ -9,7 +9,7 @@
  */
 
 #include <stdio.h>
-#include <SDL.h>
+#include <SDL2/SDL.h>
 #include <SDL_syswm.h>
 #include "gpu.h"
 

@@ -1,7 +1,7 @@
 #ifndef _keysym_h
 #define _keysym_h
 
-#include <SDL.h>
+#include <SDL2/SDL.h>
 #if SDL_MAJOR_VERSION == 2
 typedef enum {
   MY_SDLK_UNKNOWN = 0,

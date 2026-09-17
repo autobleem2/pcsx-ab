@@ -85,7 +85,7 @@ void trim(char *str);
 u16 calcCrc(u8 *d, int len);
 
 void emu_sync_state(void);
-
+void setCdromId(void);
 #ifdef __cplusplus
 }
 #endif

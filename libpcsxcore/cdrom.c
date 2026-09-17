@@ -57,6 +57,8 @@ int is_nop_count = 0;
 int nop_cnt = 0;
 static int scenes=0;
 
+
+
 /* CD-ROM magic numbers */
 #define CdlSync        0
 #define CdlNop         1

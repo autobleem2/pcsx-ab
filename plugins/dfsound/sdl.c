@@ -17,7 +17,7 @@
  */
 
 #include <stdlib.h>
-#include <SDL.h>
+#include <SDL2/SDL.h>
 #include "out.h"
 
 #define BUFFER_SIZE		22050

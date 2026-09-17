@@ -1429,7 +1429,6 @@ static int mh_input_rescan(int id, int keys)
 static const char *men_in_type_sel[] = {
 	"Standard (SCPH-1080)",
 	"Analog (SCPH-1150)",
-	"GunCon",
 	NULL
 };
 static const char h_nub_btns[] = "Experimental, keep this OFF if unsure. Select rescan after change.";
@@ -1438,15 +1437,16 @@ static const char h_vibration[]= "Must select analog above and enable this ingam
 
 static menu_entry e_menu_keyconfig[] =
 {
-	mee_handler_id("Player 1",              MA_CTRL_PLAYER1,    key_config_loop_wrap),
-	mee_handler_id("Player 2",              MA_CTRL_PLAYER2,    key_config_loop_wrap),
-	mee_handler_id("Analog controls",       MA_CTRL_ANALOG,     key_config_analog),
-	mee_handler_id("Emulator/Gun controls", MA_CTRL_EMU,        key_config_loop_wrap),
+	//mee_handler_id("Player 1",              MA_CTRL_PLAYER1,    key_config_loop_wrap),
+	//mee_handler_id("Player 2",              MA_CTRL_PLAYER2,    key_config_loop_wrap),
+	//mee_handler_id("Analog controls",       MA_CTRL_ANALOG,     key_config_analog), // this will setup automatically
+	//mee_handler_id("Emulator/Gun controls", MA_CTRL_EMU,        key_config_loop_wrap), // crashes emu
+	mee_label     ("Gamepads are autoconfigured with SDL2 GC API"),
 	mee_label     (""),
 	mee_enum      ("Port 1 device",     0, in_type_sel1,    men_in_type_sel),
 	mee_enum      ("Port 2 device",     0, in_type_sel2,    men_in_type_sel),
 	mee_onoff_h   ("Nubs as buttons",   MA_CTRL_NUBS_BTNS,  in_evdev_allow_abs_only, 1, h_nub_btns),
-	mee_onoff_h   ("Vibration",         MA_CTRL_VIBRATION,  in_enable_vibration, 1, h_vibration),
+	//mee_onoff_h   ("Vibration",         MA_CTRL_VIBRATION,  in_enable_vibration, 1, h_vibration),
 	mee_range     ("Analog deadzone",   MA_CTRL_DEADZONE,   analog_deadzone, 1, 99),
 	mee_onoff_h   ("No TS Gun trigger", 0, g_opts, OPT_TSGUN_NOTRIGGER, h_notsgun),
 	mee_cust_nosave("Save AutoBleem cfg",       MA_OPT_SAVECFG_AB,      mh_savecfg, mgn_saveloadcfg),
@@ -2601,8 +2601,12 @@ static int main_menu1_handler(int id, int keys)
 
 static menu_entry e_menu_main3[] =
 {
+        mee_enum      ("Port 1 device",     0, in_type_sel1,    men_in_type_sel),
+        mee_enum      ("Port 2 device",     0, in_type_sel2,    men_in_type_sel),
+        mee_label     (""),
         mee_handler_id("Quick Save",   MA_QUICKSAVE,   main_menu_handler),
         mee_handler_id("Quick Load",   MA_QUICKLOAD,   main_menu_handler),
+        mee_label     (""),
 		mee_handler_id("Toggle Filter",   MA_MAIN_FILTER,   main_menu_handler),
         mee_handler_id("Change CD image", MA_MAIN_SWAP_CD,   main_menu_handler),
         mee_handler   ("PCSX Menu",       main_menu1_handler),

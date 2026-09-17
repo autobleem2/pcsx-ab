@@ -178,7 +178,7 @@ set(PCSXAB_SOURCES
     plugins/dfinput/main.c plugins/dfinput/pad.c plugins/dfinput/guncon.c
     # frontend: PLATFORM=generic with USE_PLUGIN_LIB and USE_FRONTEND
     frontend/cspace.c
-    frontend/libpicofe/in_sdl.c frontend/libpicofe/in_ableem.c
+    frontend/libpicofe/in_sdl.c frontend/libpicofe/in_sdl2gc.c frontend/libpicofe/vector.c
     frontend/libpicofe/plat_sdl.c frontend/libpicofe/plat_dummy.c
     frontend/plat_sdl.c
     frontend/plugin_lib.c

@@ -68,6 +68,12 @@ static long PADreadPort2(PadDataS *pad)
 {
 	pad->controllerType = in_type2;
 	pad->buttonStatus = ~in_keystate >> 16;
+    if (in_type1 == PSE_PAD_TYPE_ANALOGPAD) {
+        pad->leftJoyX = in2_a1[0];
+        pad->leftJoyY = in2_a1[1];
+        pad->rightJoyX = in2_a2[0];
+        pad->rightJoyY = in2_a2[1];
+    }
 	return 0;
 }
 

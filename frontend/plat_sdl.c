@@ -12,8 +12,7 @@
 #include <SDL2/SDL.h>
 
 #include "libpicofe/input.h"
-//#include "libpicofe/in_sdl.h"
-#include "libpicofe/in_ableem.h"
+#include "libpicofe/in_sdl.h"
 #include "libpicofe/menu.h"
 #include "libpicofe/fonts.h"
 #include "libpicofe/plat_sdl.h"
@@ -26,6 +25,7 @@
 #include "revision.h"
 #if SDL_MAJOR_VERSION == 2
 #include "libpicofe/keysym.h"
+#include "libpicofe/in_sdl2gc.h"
 #endif
 
 #define RMASK_16 0x0000F800
@@ -269,11 +269,19 @@ void plat_init(void)
  
 
   if (enter_mode == 1) {
-      in_ableem_init(&in_sdl_platform_data_1, plat_sdl_event_handler);
+      in_sdl_init(&in_sdl_platform_data_1, plat_sdl_event_handler);
   }
   else {
-      in_ableem_init(&in_sdl_platform_data_2, plat_sdl_event_handler);
+      in_sdl_init(&in_sdl_platform_data_2, plat_sdl_event_handler);
   }
+#if SDL_MAJOR_VERSION == 2
+    if (enter_mode == 1) {
+        in_sdl2gc_init(&in_sdl_platform_data_1, plat_sdl_event_handler);
+    }
+    else {
+        in_sdl2gc_init(&in_sdl_platform_data_2, plat_sdl_event_handler);
+    }
+#endif
 
   in_probe();
   pl_rearmed_cbs.only_16bpp = 0;
