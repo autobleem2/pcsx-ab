@@ -1,0 +1,98 @@
+# pcsx-ab - CLAUDE.md
+
+The AutoBleem team's PCSX-ReARMed fork for the PlayStation Classic (author: screemer, the repo owner), being
+ported to the Raspberry Pi to run under autobleem-develop's Pi port. This file is the project knowledge of
+record; keep it current in the same commit as any change it describes. Git history has the reasoning per
+change (commit messages are prose).
+
+## State (2026-09-17)
+
+| | |
+|---|---|
+| Build system | CMake + Ninja (`CMakeLists.txt`); upstream `configure`/Makefiles deleted |
+| Raspberry Pi cross build | `./make_rpi.sh` -> `build_rpi/dist/` - builds, links, **never run on a Pi** |
+| Windows dev build | `./make_win.sh` -> `build_win/pcsx-ab.exe` - runs games (interpreter, peops GPU) |
+| PlayStation Classic | `toolchains/psc/PSCtoolchainV8.cmake` - untested, Sony toolchain not on this host |
+| Video on the Pi | SDL2 renderer + streaming texture (`plat_sdl_present`), no Wayland/GLES - proven on Windows |
+| Gamepad | SDL2 GameController driver (`in_sdl2gc.c`) - proven on Windows with an Xbox pad |
+| CHD images | `handlechd`/`cdread_chd` over vendored static libmamecd - frame-exact vs bins; CDDA-by-ear untested |
+| Not started | `dist/` folder (rpi + win32 binaries + plugins in AutoBleem's `emu/` layout); AutoBleem's own Windows launch support |
+
+## Decisions (made by the owner - do not re-ask)
+
+- **CMake, mirroring autobleem-develop**: same sysGCC toolchain (`C:\sysGCC\raspberry`), same
+  `make_rpi.sh` / `toolchains/rpi/` shape, so the two projects build side by side and the result drops into
+  AutoBleem's `payload_rpi/Autobleem/bin/emu/` (`AUTOBLEEM_DIR=../autobleem-develop ./make_rpi.sh`).
+- **No Wayland on the Pi.** `PCSXAB_GLES=OFF` compiles out `frontend/libpicofe/gl_platform.c` (the console's
+  EGL-on-Weston output) and `gpu_gles.so`; video goes through SDL2's renderer on KMSDRM. GL branches are
+  untouched for the console.
+- **Codec libraries linked static** (FLAC, lzma, libchdr) - nothing new to install on the console or the Pi.
+  The system zlib stays for `gz*()` save-state I/O; libpng needs libz on every target anyway.
+- `develop` is the branch (git-flow like the owner's other repos); the repo was initialised from a console-SDK
+  export, no upstream history.
+
+## Layout
+
+```
+CMakeLists.txt              the whole build; PCSXAB_* options replace configure's guesses
+make_rpi.sh / make_win.sh   the two builds (MSYS2 UCRT64 shell; ucrt64/bin on PATH for cmake/ninja)
+toolchains/rpi/             RPitoolchain.cmake + devkit/ (SDL2 + libpng headers, hand-written Linux
+                            SDL_config.h) + cmake/Find{SDL2,PNG}.cmake - the sysroot has runtime .so's, no -dev
+toolchains/psc/             PSCtoolchainV8.cmake (config.mak.autobleem as CMake)
+frontend/                   PCSX-ReARMed frontend: main.c, menu.c, plat_sdl.c, plugin_lib.c (+AB additions)
+frontend/libpicofe/         notaz's platform lib: plat_sdl.c (video, renderer path), in_sdl.c (keyboard),
+                            in_sdl2gc.c (pads), input.c, menu.c; linux/ (plat.c, in_evdev.c) on the targets
+frontend/win32/             Windows host layer: plat_win32.c + include/dirent.h (shadows mingw's)
+include/win32_compat.h      dlopen/mkdir/fsync/strcasestr for MinGW
+libpcsxcore/                emulator core; cdriso.c has the disc readers incl. CHD; memmap_win32.c
+plugins/                    dfsound (SPU, built in), gpulib + gpu_neon/dfxvideo/gpu_unai (built-in GPU +
+                            loadable .so/.dll), spunull, cdrcimg, dfinput
+third_party/libmamecd/      vendored libchdr fork (BSD) + deps/{flac,lzma,zlib}, all static
+```
+
+## Building and running
+
+```bash
+./make_rpi.sh            # clean cross build; -k incremental; AUTOBLEEM_DIR=... copies into AutoBleem
+./make_win.sh            # Debug build + runtime DLLs next to the exe
+```
+
+Run directory = what AutoBleem's `launch.sh` sets up: `.pcsx/` (config, memcards, sstates), `bios/`,
+`plugins/`, `skin/` (from `frontend/pandora/skin`). Args as launch.sh passes them:
+
+```
+pcsx-ab -filter 0 -ratio 0 -lang 0 -region 0 -enter 1 -cdfile "D:/AB/Games/X/game.cue"
+```
+
+Test material on this machine: `D:\AB\Games` (cue/bin, PBP, and CHDs: Abe2, WipEout XL - 12 tracks with
+CDDA, Geppy-X, Resident Evil 2, Tomb Raider II), `D:\AB\Games (copy)\MDK (US)` (30-track cue). Re-Volt's
+EBOOT.PBP and MDK were the first games run. A gamepad log line to look for: `sdl2gc:Probed controller`.
+
+## Things learned the hard way
+
+- **GCC 14 vs Sony's GCC 8**: `-fcommon` is required (tentative definitions in headers, `.comm` in
+  linkage_arm.S); four `-Wno-error=` flags keep ~30 pre-existing implicit prototypes at warning level.
+  They are tech debt, not fixed.
+- **Source files are CRLF with tabs.** Edit by exact-string or line-range replacement in a Python script
+  (normalise CRLF, restore on write); bash heredocs mangle backslashes and quotes in this environment - use
+  the Write tool for new files and for scripts containing C string literals.
+- **A window has a surface or a renderer, never both** (SDL >= 2.28 refuses). The non-GL path never calls
+  `SDL_GetWindowSurface`; the GL branch still does, but is unreachable when `HAVE_GLES` is off.
+- **`SDL_CONTROLLER_BUTTON_MAX` grew** (15 -> 21 in 2.0.14+): a "0 = unmapped" default in
+  `in_sdl2gc_key_map` meant every new unpressed button cleared d-pad UP. Default is -1 now.
+- **`SysLibError()` must return NULL on success** - `plugins.c`'s `CheckErr` treats any non-NULL as failure;
+  the old `_WIN32` stub returned a string and no plugin could load.
+- **ISOopen's mode1/2048 guess** (file size % 2048) and the sub_mixed override now apply only to the plain
+  reader; they would silently replace a container's reader.
+- CHD facts: tracks stored back to back, each padded to 4 frames; PGTYPE starting with `V` = pregap stored in
+  the frames, otherwise virtual (reads as silence); audio big-endian; FLAC's `cpu.c` prints on every decoder
+  init unless `NDEBUG`.
+- `spu.c` called `tanh()` without `<math.h>` - on hard-float ARM that read the result from r0. Fixed; it
+  shipped that way on the console.
+
+## Working agreements (same as autobleem-develop)
+
+One commit per step, each building on both targets (`make_rpi.sh` and `make_win.sh`) and smoke-run on
+Windows where a game can prove it. Commit messages explain why, including what was deliberately not done.
+Vendored code is compiled with `-w` and not made warning-free. Update this file in the same commit when the
+layout, a decision or the status table changes.
