@@ -7,6 +7,7 @@
 #   toolchains/rpi/RPitoolchain.cmake   Raspberry Pi (32-bit OS), cross from Windows   -> ./make_rpi.sh
 #   toolchains/psc/PSCtoolchainV8.cmake PlayStation Classic, Sony's armv8 toolchain
 #   (none)                              native build on the Pi/any ARM Linux with the -dev packages installed
+#   (none, MSYS2 UCRT64)                Windows development build, interpreter + peops GPU  -> ./make_win.sh
 #
 # Targets: the pcsx-ab executable (in the build dir root) and the loadable GPU/SPU plugins (in plugins/),
 # which is the layout AutoBleem's launch scripts expect under Autobleem/bin/emu/.
@@ -179,13 +180,21 @@ set(PCSXAB_SOURCES
     frontend/cspace.c
     frontend/libpicofe/in_sdl.c frontend/libpicofe/in_ableem.c
     frontend/libpicofe/plat_sdl.c frontend/libpicofe/plat_dummy.c
-    frontend/libpicofe/linux/in_evdev.c
     frontend/plat_sdl.c
-    frontend/plugin_lib.c frontend/libpicofe/linux/plat.c
+    frontend/plugin_lib.c
     frontend/libpicofe/readpng.c frontend/libpicofe/fonts.c
     frontend/menu.c frontend/libpicofe/input.c
     frontend/main.c frontend/plugin.c
 )
+
+# the host layer: libpicofe's linux/ on the targets, frontend/win32/ for the MinGW development build
+if (WIN32)
+    list(APPEND PCSXAB_SOURCES frontend/win32/plat_win32.c libpcsxcore/memmap_win32.c)
+    # our <dirent.h> (with d_type/scandir) must shadow mingw's: -I dirs are searched before system ones
+    include_directories(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/frontend/win32/include)
+else()
+    list(APPEND PCSXAB_SOURCES frontend/libpicofe/linux/plat.c frontend/libpicofe/linux/in_evdev.c)
+endif()
 
 # gte_nf.o is gte.c compiled a second time with -DFLAGLESS (the flag-less GTE variant the dynarec calls
 # into). CMake will not compile one source twice in one target, so a one-line wrapper does it.
@@ -264,6 +273,12 @@ add_executable(pcsx-ab ${PCSXAB_SOURCES})
 target_include_directories(pcsx-ab PRIVATE ${_pcsxab_sdl_inc_both})
 target_link_libraries(pcsx-ab PRIVATE SDL2::SDL2 PNG::PNG ZLIB::ZLIB Threads::Threads
     ${CMAKE_DL_LIBS} m ${_pcsxab_sound_libs} ${_pcsxab_gles_libs})
+if (WIN32)
+    # SDL's own main() wrapper is not wanted (frontend/main.c has the real one); winsock for the gdb stub
+    # in libpcsxcore/socket.c, winmm for timeBeginPeriod in frontend/win32/plat_win32.c
+    target_compile_definitions(pcsx-ab PRIVATE SDL_MAIN_HANDLED)
+    target_link_libraries(pcsx-ab PRIVATE ws2_32 winmm)
+endif()
 if (PCSXAB_BUILTIN_GPU STREQUAL "unai")
     set_target_properties(pcsx-ab PROPERTIES LINKER_LANGUAGE CXX)
 endif()

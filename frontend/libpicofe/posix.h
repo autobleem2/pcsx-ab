@@ -9,7 +9,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#ifdef __MINGW32__
+/* upstream's MinGW hacks; not needed with pcsx-ab's own <dirent.h> (frontend/win32/include), which has a
+ * real d_type and scandir(), and include/win32_compat.h's mkdir() */
+#if defined(__MINGW32__) && !defined(PCSXAB_WIN32_DIRENT_H)
 #warning hacks!
 #define mkdir(pathname,mode) mkdir(pathname)
 #define d_type d_ino

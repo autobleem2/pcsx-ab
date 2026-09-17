@@ -36,6 +36,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
+#ifdef _WIN32
+#include "win32_compat.h"
+#endif
 
 char CdromId[10] = "";
 char CdromId_old[10] = "";

@@ -12,7 +12,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#ifdef _WIN32
+#include "win32_compat.h"
+#else
 #include <dlfcn.h>
+#endif
 #include <zlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>

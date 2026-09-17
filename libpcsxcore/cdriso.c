@@ -30,7 +30,9 @@
 #include <process.h>
 #include <windows.h>
 #define strcasecmp _stricmp
+#ifndef __MINGW32__
 #define usleep(x) Sleep((x) / 1000)
+#endif
 #else
 #include <pthread.h>
 #include <sys/time.h>

@@ -42,6 +42,21 @@ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=toolchains/psc/
 cmake --build build_psc
 ```
 
+**Windows development build (MSYS2 UCRT64 / MinGW)** - for running the frontend on the PC, the way
+AutoBleem's `make_win.sh` is used. x86 has no dynarec, so this is the interpreter and the peops GPU; fast
+enough to play, but its purpose is debugging the SDL2 video path, menu, input and save states without a Pi:
+
+```bash
+./make_win.sh                    # needs mingw-w64-ucrt-x86_64-{gcc,cmake,ninja,SDL2,libpng}
+mkdir run && cd run && mkdir .pcsx bios && cp -r ../build_win/plugins . && cp -r ../frontend/pandora/skin .
+../build_win/pcsx-ab.exe -filter 0 -ratio 0 -lang 0 -region 0 -enter 1 -cdfile "D:/Games/Game/EBOOT.PBP"
+```
+
+(That run directory is what AutoBleem's `launch.sh` sets up on the console: `.pcsx/` for the config, memory
+cards and states, `bios/`, `plugins/`, `skin/`.) The host layer is `frontend/win32/` plus
+`include/win32_compat.h`: mmap over VirtualAlloc, a `<dirent.h>` with `d_type`/`scandir`, `dlopen`, `fsync`,
+`strcasestr`; the console's power-button and CPU-temperature watchers are compiled out.
+
 **Natively on a Pi / any ARM Linux** with `libsdl2-dev libpng-dev zlib1g-dev` installed:
 
 ```bash
@@ -51,8 +66,10 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
 Options (`cmake -L`): `PCSXAB_ENABLE_MENU`, `PCSXAB_NEON`, `PCSXAB_DYNAREC`, `PCSXAB_BUILTIN_GPU` (neon/peops/unai),
 `PCSXAB_SOUND_DRIVERS` (sdl alsa oss pulseaudio), `PCSXAB_GLES`, `PCSXAB_PLUGINS`, `PCSXAB_LINK_MAP`.
 
-**Raspberry Pi status:** the cross build compiles and links against exactly the libraries a stock Pi OS has
-(`libSDL2-2.0.so.0`, `libpng16`, `libz`). It has not yet been run on a Pi.
+**Status:** the Pi cross build compiles and links against exactly the libraries a stock Pi OS has
+(`libSDL2-2.0.so.0`, `libpng16`, `libz`) but has not yet been run on a Pi. The SDL2 renderer video path it
+uses has been run on the PC build (Re-Volt boots from `EBOOT.PBP` and draws), so what remains to verify on
+the Pi is the platform, not the code path.
 
 PCSX ReARMed is yet another PCSX fork based on the PCSX-Reloaded project,
 which itself contains code from PCSX, PCSX-df and PCSX-Revolution. This

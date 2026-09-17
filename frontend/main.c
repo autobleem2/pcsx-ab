@@ -12,13 +12,15 @@
 #include <signal.h>
 #include <time.h>
 #include <pthread.h>
+#ifndef _WIN32
 #include <sys/inotify.h>
+#endif
 #include <sys/stat.h>
 
 #ifndef _WIN32
-
 #include <dlfcn.h>
-
+#else
+#include "win32_compat.h"
 #endif
 
 #include "main.h"
@@ -140,6 +142,18 @@ static int get_gameid_filename(char *buf, int size, const char *fmt, int i) {
     }
 
     return 0;
+}
+
+/* "/..." everywhere; on Windows also "C:\..." / "C:/..." */
+static int path_is_absolute(const char *p) {
+#ifdef _WIN32
+    if (((p[0] >= 'A' && p[0] <= 'Z') || (p[0] >= 'a' && p[0] <= 'z')) && p[1] == ':'
+        && (p[2] == '/' || p[2] == '\\'))
+        return 1;
+    if (p[0] == '\\')
+        return 1;
+#endif
+    return p[0] == '/';
 }
 
 void set_cd_image(const char *fname) {
@@ -682,7 +696,7 @@ int main(int argc, char *argv[]) {
 
             if (i + 1 >= argc) break;
             strncpy(isofilename, argv[++i], MAXPATHLEN);
-            if (isofilename[0] != '/') {
+            if (!path_is_absolute(isofilename)) {
                 getcwd(path, MAXPATHLEN);
                 if (strlen(path) + strlen(isofilename) + 1 < MAXPATHLEN) {
                     strcat(path, "/");
@@ -771,7 +785,7 @@ int main(int argc, char *argv[]) {
             return 0;
         } else {
             strncpy(file, argv[i], MAXPATHLEN);
-            if (file[0] != '/') {
+            if (!path_is_absolute(file)) {
                 getcwd(path, MAXPATHLEN);
                 if (strlen(path) + strlen(file) + 1 < MAXPATHLEN) {
                     strcat(path, "/");
@@ -1313,7 +1327,9 @@ const char *SysLibError() {
 #ifndef _WIN32
     return dlerror();
 #else
-    return "not supported";
+    /* libpcsxcore/plugins.c's CheckErr treats anything non-NULL as a failure; the built-in plugins
+     * resolve through plugin_link() and never set an error, exactly as on Linux */
+    return NULL;
 #endif
 }
 
@@ -1328,6 +1344,7 @@ void SysCloseLibrary(void *lib) {
 #endif
 }
 
+#ifndef _WIN32
 static int check_poweroff_event(int power_fd) {
     int i = 0;
     char buffer[BUF_LEN];
@@ -1377,7 +1394,12 @@ static void power_manage(void) {
     return;
 }
 
+#endif /* !_WIN32 */
+
 int create_power_off_thread(void) {
+#ifdef _WIN32
+    return 0;   /* no power button to watch on a PC */
+#else
     int ret;
     pthread_attr_t power_manage_attr;
 
@@ -1392,6 +1414,7 @@ int create_power_off_thread(void) {
     pthread_attr_destroy(&power_manage_attr);
 
     return ret;
+#endif
 }
 
 void power_off(void) {
@@ -1411,6 +1434,7 @@ void power_off(void) {
 }
 
 // sub-thread for watching cpu temperature
+#ifndef _WIN32
 static int check_cpu_temperature(int cpu_temp_fd) {
     int cpu_temperature, cpu_mode;
     FILE *fp;
@@ -1476,7 +1500,12 @@ static void watch_cpu_temperature(void) {
     is_high_temperature = 1;
 }
 
+#endif /* !_WIN32 */
+
 int begin_watch_cpu_temperature(void) {
+#ifdef _WIN32
+    return 0;   /* no SoC thermal file to watch on a PC */
+#else
     int ret;
     pthread_attr_t cpu_temp_attr;
 
@@ -1487,4 +1516,5 @@ int begin_watch_cpu_temperature(void) {
     pthread_attr_destroy(&cpu_temp_attr);
 
     return ret;
+#endif
 }
