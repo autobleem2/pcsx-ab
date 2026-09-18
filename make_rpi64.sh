@@ -29,7 +29,7 @@ cmake --build build_rpi64
 
 # a flat copy of what ships: the executable and the plugin .so's, nothing else from the build tree.
 # Stripped, as make_rpi.sh does for the 32-bit Pi; the unstripped ones stay in build_rpi64/ for gdb.
-STRIP="C:/sysGCC/raspberry64/bin/aarch64-linux-gnu-strip.exe"
+STRIP="E:/sysGCC/raspberry64/bin/aarch64-linux-gnu-strip.exe"
 rm -rf build_rpi64/dist
 mkdir -p build_rpi64/dist/plugins
 "$STRIP" -o build_rpi64/dist/pcsx-ab build_rpi64/pcsx-ab

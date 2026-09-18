@@ -36,10 +36,10 @@ frame is uploaded to a streaming texture and scaled on the GPU by SDL's KMSDRM/G
 linear/nearest, exactly as the console's GL path does.
 
 **Raspberry Pi (64-bit Raspberry Pi OS, Trixie), cross-compiled from Windows** - same idea, a separate
-toolchain (`C:/sysGCC/raspberry64`, not the 32-bit one):
+toolchain (`E:/sysGCC/raspberry64`, not the 32-bit one):
 
 ```bash
-./make_rpi64.sh                                    # MSYS2 UCRT64 shell; needs C:/sysGCC/raspberry64
+./make_rpi64.sh                                    # MSYS2 UCRT64 shell; needs E:/sysGCC/raspberry64
 AUTOBLEEM_DIR=../autobleem-develop ./make_rpi64.sh # ...and drop the result into AutoBleem's emu-arm64/
 ```
 

@@ -11,7 +11,7 @@ change (commit messages are prose).
 |---|---|
 | Build system | CMake + Ninja (`CMakeLists.txt`); upstream `configure`/Makefiles deleted |
 | Raspberry Pi cross build | `./make_rpi.sh` -> `build_rpi/dist/` - builds, links, **never run on a Pi** |
-| Raspberry Pi 64-bit cross build | `./make_rpi64.sh` -> `build_rpi64/dist/` - interpreter + peops GPU (no aarch64 dynarec/NEON in this fork), **no toolchain installed, unbuilt, unrun** |
+| Raspberry Pi 64-bit cross build | `./make_rpi64.sh` -> `build_rpi64/dist/` - interpreter + peops GPU (no aarch64 dynarec/NEON in this fork), **builds clean (verified 2026-09-19, real aarch64 ELF), never run on a Pi** |
 | Windows dev build | `./make_win.sh` -> `build_win/pcsx-ab.exe` - runs games (interpreter, peops GPU) |
 | PlayStation Classic | `./make_psc.sh` -> `build_psc/dist/` via the build server - builds and links with the GLES/Wayland path; **not yet run on a console** |
 | Video on the Pi | SDL2 renderer + streaming texture (`plat_sdl_present`), no Wayland/GLES - proven on Windows |
@@ -25,8 +25,9 @@ change (commit messages are prose).
   `make_rpi.sh` / `toolchains/rpi/` shape, so the two projects build side by side and the result drops into
   AutoBleem's `payload_rpi/Autobleem/bin/emu/` (`AUTOBLEEM_DIR=../autobleem-develop ./make_rpi.sh`).
 - **64-bit Pi (2026-09-18), same idea**: `toolchains/rpi64/RPi64toolchain.cmake` + `make_rpi64.sh`, over
-  "SysGCC for Raspberry Pi (64-bit)" at `C:\sysGCC\raspberry64` (not installed on this host yet - see
-  AutoBleem's CLAUDE.md for the owner's decision on how it's obtained). `CMAKE_SYSTEM_PROCESSOR=aarch64`
+  "SysGCC for Raspberry Pi (64-bit)" (gnutoolchains.com/raspberry64, Sysprogs OÜ - GCC 14.2.0 against
+  2025-12-04-raspios-trixie), installed 2026-09-18 to **`E:\sysGCC\raspberry64`** (the owner's call, not
+  `C:` - see AutoBleem's CLAUDE.md). `CMAKE_SYSTEM_PROCESSOR=aarch64`
   deliberately does **not** match `CMakeLists.txt`'s `_pcsxab_is_arm` regex (`^(arm|ARM)`): Ari64's dynarec
   and the NEON GPU/GTE code are 32-bit ARM assembly only, no aarch64 backend in this fork, so the 64-bit Pi
   builds like the Windows dev build does - C interpreter, `PCSXAB_BUILTIN_GPU=peops` - correct, just slower

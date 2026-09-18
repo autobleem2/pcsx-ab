@@ -18,7 +18,7 @@
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
 
-set(_pcsxab_rpi64_root "C:/sysGCC/raspberry64" CACHE PATH "SysGCC for Raspberry Pi (64-bit) install directory")
+set(_pcsxab_rpi64_root "E:/sysGCC/raspberry64" CACHE PATH "SysGCC for Raspberry Pi (64-bit) install directory")
 set(_pcsxab_rpi64_sysroot "${_pcsxab_rpi64_root}/aarch64-linux-gnu/sysroot")
 
 set(CMAKE_C_COMPILER   "${_pcsxab_rpi64_root}/bin/aarch64-linux-gnu-gcc.exe")
