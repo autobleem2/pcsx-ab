@@ -1438,6 +1438,9 @@ static int check_cpu_temperature(int cpu_temp_fd) {
         return 0;
     }
     fp = fopen(CPU_TEMP_FILE, "r");
+    if (fp == NULL) {
+        return is_normal_temp;
+    }
     ret = fscanf(fp, "%d%d", &cpu_temperature, &cpu_mode);
     if (ret != EOF) {
         is_normal_temp = (cpu_temperature < cpu_temp_limit) ? 1 : 0;
@@ -1454,27 +1457,38 @@ static void watch_cpu_temperature(void) {
     int ret;
     FILE *fp;
 
+    // The two files are the PlayStation Classic's power daemon's. On any other machine (a Raspberry Pi)
+    // they do not exist: there is nothing to watch, so this thread simply ends. It used to go on and
+    // fclose(NULL) - a segfault a fraction of a second into every game on the Pi.
+    if (access(CPU_TEMP_FILE, R_OK) != 0) {
+        printf("no %s - not watching the cpu temperature\n", CPU_TEMP_FILE);
+        return;
+    }
+
     cpu_temp_fd = inotify_init();
     if (cpu_temp_fd == -1) {
         printf("ERROR:failed to init inotify for cpu temperature\n");
+        return;
     }
 
     cpu_temp_wd = inotify_add_watch(cpu_temp_fd, CPU_TEMP_FILE, IN_MODIFY);
     if (cpu_temp_wd == -1) {
         printf("ERROR:failed to add watch descriptor for cpu temperature\n");
+        close(cpu_temp_fd);
+        return;
     }
 
     fp = fopen(CPU_TEMP_LIMIT_FILE, "r");
     if (fp != NULL) {
         do {
-            ret = fscanf(fp, "%s%d", &temp_limit_str, &temp_limit_val);
-            if (strcmp(temp_limit_str, CPU_TEMP_LIMIT_STRING) == 0) {
+            ret = fscanf(fp, "%s%d", temp_limit_str, &temp_limit_val);
+            if (ret == 2 && strcmp(temp_limit_str, CPU_TEMP_LIMIT_STRING) == 0) {
                 cpu_temp_limit = temp_limit_val;
                 break;
             }
         } while (ret != EOF);
+        fclose(fp);
     }
-    fclose(fp);
 
     while (1) {
         ret = check_cpu_temperature(cpu_temp_fd);
