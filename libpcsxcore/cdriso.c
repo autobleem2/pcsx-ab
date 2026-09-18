@@ -122,7 +122,7 @@ static int numtracks = 0;
 static struct trackinfo ti[MAXTRACKS];
 
 #ifdef HAVE_CHD
-/* MAME CHD images (chdman createcd), read through the vendored libmamecd (third_party/libmamecd).
+/* MAME CHD images (chdman createcd), read through the vendored libchdr (third_party/libchdr).
  *
  * A CD CHD is a stream of 2448-byte units - 2352 bytes of raw sector + 96 of subcode - grouped into
  * hunks, with the tracks stored one after another and each padded to a multiple of 4 frames. The
@@ -133,7 +133,7 @@ static struct trackinfo ti[MAXTRACKS];
  *
  * Audio is stored big-endian (MAME's convention), hence cddaBigEndian. One hunk is cached; the CDDA
  * thread and the emulator read through the same cache, so a lock guards it. */
-#include <libmamecd/chd.h>
+#include <libchdr/chd.h>
 #include <pthread.h>
 
 #define CHD_UNIT_BYTES (CD_FRAMESIZE_RAW + SUB_FRAMESIZE)

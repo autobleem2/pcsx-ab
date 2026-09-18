@@ -15,7 +15,7 @@ change (commit messages are prose).
 | PlayStation Classic | `./make_psc.sh` -> `build_psc/dist/` via the build server - builds and links with the GLES/Wayland path; **not yet run on a console** |
 | Video on the Pi | SDL2 renderer + streaming texture (`plat_sdl_present`), no Wayland/GLES - proven on Windows |
 | Gamepad | SDL2 GameController driver (`in_sdl2gc.c`) - proven on Windows with an Xbox pad |
-| CHD images | `handlechd`/`cdread_chd` over vendored static libmamecd - frame-exact vs bins; CDDA-by-ear untested |
+| CHD images | `handlechd`/`cdread_chd` over vendored static libchdr (upstream, with zstd - the same tree as autobleem-develop's) - frame-exact vs bins; CDDA-by-ear untested |
 | Not started | `dist/` folder (rpi + win32 binaries + plugins in AutoBleem's `emu/` layout); AutoBleem's own Windows launch support |
 
 ## Decisions (made by the owner - do not re-ask)
@@ -49,7 +49,7 @@ include/win32_compat.h      dlopen/mkdir/fsync/strcasestr for MinGW
 libpcsxcore/                emulator core; cdriso.c has the disc readers incl. CHD; memmap_win32.c
 plugins/                    dfsound (SPU, built in), gpulib + gpu_neon/dfxvideo/gpu_unai (built-in GPU +
                             loadable .so/.dll), spunull, cdrcimg, dfinput
-third_party/libmamecd/      vendored libchdr fork (BSD) + deps/{flac,lzma,zlib}, all static
+third_party/libchdr/        vendored upstream libchdr (BSD) + deps/{lzma,zstd}, static; zlib is the system one (CHDR_SYSTEM_ZLIB)
 ```
 
 ## Building and running

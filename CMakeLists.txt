@@ -44,7 +44,7 @@ option(PCSXAB_DYNAREC     "Ari64's MIPS->ARM recompiler. ARM only, and the only 
 option(PCSXAB_PLUGINS     "Also build the loadable plugins (gpu_peops, gpu_unai, spunull [, gpu_gles])" ON)
 option(PCSXAB_GLES        "OpenGL ES output through EGL on a Wayland surface (the PlayStation Classic's Weston). Off means video goes through an SDL2 renderer + streaming texture - what a Raspberry Pi on KMSDRM uses" OFF)
 option(PCSXAB_LINK_MAP    "Write pcsx-ab.map next to the executable (the Makefile always did)" ON)
-option(PCSXAB_CHD         "CHD disc images, via the vendored libmamecd (static: FLAC, lzma, zlib come with it)" ON)
+option(PCSXAB_CHD         "CHD disc images, via the vendored libchdr (static: lzma and zstd come with it, zlib is the system one)" ON)
 set(PCSXAB_BUILTIN_GPU "" CACHE STRING "GPU compiled into the executable: neon, peops or unai (empty = neon with NEON, else peops)")
 set_property(CACHE PCSXAB_BUILTIN_GPU PROPERTY STRINGS "" neon peops unai)
 set(PCSXAB_SOUND_DRIVERS "sdl" CACHE STRING "Space-separated SPU output drivers: sdl alsa oss pulseaudio")
@@ -271,13 +271,16 @@ set_source_files_properties(plugins/dfsound/out.c PROPERTIES COMPILE_DEFINITIONS
 set_source_files_properties(libpcsxcore/psxbios.c PROPERTIES COMPILE_OPTIONS -Wno-nonnull)
 
 if (PCSXAB_CHD)
-    # mamecd and the codecs it decompresses with (FLAC, lzma, its own inflate) are static, from
-    # third_party/libmamecd/deps - a CHD build adds no shared library to what the Pi or the console must
-    # have. The system zlib stays for the emulator's own gz*() save-state I/O (the vendored copy carries only
-    # the inflate/deflate core); libpng needs libz on every target anyway.
-    add_subdirectory(third_party/libmamecd EXCLUDE_FROM_ALL)
+    # libchdr and the codecs it decompresses with (lzma, zstd; FLAC is header-only) are static, from
+    # third_party/libchdr/deps - a CHD build adds no shared library to what the Pi or the console must
+    # have. It is the same vendored tree as autobleem-develop's lib_ableem/third_party/libchdr (upstream
+    # 8bba774 with zstd, 2026-09-18 - the earlier libmamecd fork could not open chdman's default zstd
+    # CHDs). CHDR_SYSTEM_ZLIB: the system zlib is already here for the gz*() save-state I/O and libpng, so
+    # libchdr inflates with that one rather than a second copy in the binary.
+    set(CHDR_SYSTEM_ZLIB ON CACHE BOOL "" FORCE)
+    add_subdirectory(third_party/libchdr EXCLUDE_FROM_ALL)
     set_source_files_properties(libpcsxcore/cdriso.c PROPERTIES COMPILE_DEFINITIONS HAVE_CHD)
-    set(_pcsxab_chd_libs mamecd)
+    set(_pcsxab_chd_libs chdr)
 endif()
 
 add_executable(pcsx-ab ${PCSXAB_SOURCES})
