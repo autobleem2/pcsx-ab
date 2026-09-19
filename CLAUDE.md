@@ -11,6 +11,7 @@ change (commit messages are prose).
 |---|---|
 | Build system | CMake + Ninja (`CMakeLists.txt`); upstream `configure`/Makefiles deleted |
 | Raspberry Pi cross build | `./make_rpi.sh` -> `build_rpi/dist/` - builds, links, **never run on a Pi** |
+| Raspberry Pi 64-bit cross build | `./make_rpi64.sh` -> `build_rpi64/dist/` - interpreter + peops GPU (no aarch64 dynarec/NEON in this fork), **builds clean (verified 2026-09-19, real aarch64 ELF), never run on a Pi** |
 | Windows dev build | `./make_win.sh` -> `build_win/pcsx-ab.exe` - runs games (interpreter, peops GPU) |
 | PlayStation Classic | `./make_psc.sh` -> `build_psc/dist/` via the build server - builds and links with the GLES/Wayland path; **not yet run on a console** |
 | Video on the Pi | SDL2 renderer + streaming texture (`plat_sdl_present`), no Wayland/GLES - proven on Windows |
@@ -23,6 +24,18 @@ change (commit messages are prose).
 - **CMake, mirroring autobleem-develop**: same sysGCC toolchain (`C:\sysGCC\raspberry`), same
   `make_rpi.sh` / `toolchains/rpi/` shape, so the two projects build side by side and the result drops into
   AutoBleem's `payload_rpi/Autobleem/bin/emu/` (`AUTOBLEEM_DIR=../autobleem-develop ./make_rpi.sh`).
+- **64-bit Pi (2026-09-18), same idea**: `toolchains/rpi64/RPi64toolchain.cmake` + `make_rpi64.sh`, over
+  "SysGCC for Raspberry Pi (64-bit)" (gnutoolchains.com/raspberry64, Sysprogs OÜ - GCC 14.2.0 against
+  2025-12-04-raspios-trixie), installed 2026-09-18 to **`E:\sysGCC\raspberry64`** (the owner's call, not
+  `C:` - see AutoBleem's CLAUDE.md). `CMAKE_SYSTEM_PROCESSOR=aarch64`
+  deliberately does **not** match `CMakeLists.txt`'s `_pcsxab_is_arm` regex (`^(arm|ARM)`): Ari64's dynarec
+  and the NEON GPU/GTE code are 32-bit ARM assembly only, no aarch64 backend in this fork, so the 64-bit Pi
+  builds like the Windows dev build does - C interpreter, `PCSXAB_BUILTIN_GPU=peops` - correct, just slower
+  per clock than the 32-bit Pi's NEON dynarec. `toolchains/rpi64/cmake/Find{SDL2,PNG}.cmake` reuse
+  `toolchains/rpi/devkit/include` by relative path (arch-independent headers) rather than duplicating it;
+  only the sysroot library directory (`usr/lib/aarch64-linux-gnu`) differs. Drops into AutoBleem's
+  `payload_rpi/Autobleem/bin/emu-arm64/`, a separate directory from the 32-bit `emu/` because the two
+  binaries cannot share one checked-in path.
 - **No Wayland on the Pi.** `PCSXAB_GLES=OFF` compiles out `frontend/libpicofe/gl_platform.c` (the console's
   EGL-on-Weston output) and `gpu_gles.so`; video goes through SDL2's renderer on KMSDRM. GL branches are
   untouched for the console.
@@ -39,6 +52,8 @@ make_rpi.sh / make_win.sh   the local builds (MSYS2 UCRT64 shell; ucrt64/bin on 
 make_psc.sh                 the console build, on the build server over ssh (see "Build server")
 toolchains/rpi/             RPitoolchain.cmake + devkit/ (SDL2 + libpng headers, hand-written Linux
                             SDL_config.h) + cmake/Find{SDL2,PNG}.cmake - the sysroot has runtime .so's, no -dev
+toolchains/rpi64/           RPi64toolchain.cmake + cmake/Find{SDL2,PNG}.cmake, reusing toolchains/rpi/devkit/
+                            (arch-independent headers) - only the sysroot lib dir differs from the 32-bit one
 toolchains/psc/             PSCtoolchainV8.cmake (config.mak.autobleem as CMake) + cmake/FindSDL2.cmake, which
                             copies the sysroot's SDL2 2.0.4 headers into the build tree with X11 undefined
 frontend/                   PCSX-ReARMed frontend: main.c, menu.c, plat_sdl.c, plugin_lib.c (+AB additions)
@@ -56,6 +71,7 @@ third_party/libchdr/        vendored upstream libchdr (BSD) + deps/{lzma,zstd}, 
 
 ```bash
 ./make_rpi.sh            # clean cross build; -k incremental; AUTOBLEEM_DIR=... copies into AutoBleem
+./make_rpi64.sh          # same, for the 64-bit Pi; copies into AutoBleem's emu-arm64/ instead of emu/
 ./make_win.sh            # Debug build + runtime DLLs next to the exe
 ```
 

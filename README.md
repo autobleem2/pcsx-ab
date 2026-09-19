@@ -35,6 +35,19 @@ frame is uploaded to a streaming texture and scaled on the GPU by SDL's KMSDRM/G
 (`plat_sdl_present()` in `frontend/libpicofe/plat_sdl.c`); `-ratio` pillarboxes to 4:3, `-filter` picks
 linear/nearest, exactly as the console's GL path does.
 
+**Raspberry Pi (64-bit Raspberry Pi OS, Trixie), cross-compiled from Windows** - same idea, a separate
+toolchain (`E:/sysGCC/raspberry64`, not the 32-bit one):
+
+```bash
+./make_rpi64.sh                                    # MSYS2 UCRT64 shell; needs E:/sysGCC/raspberry64
+AUTOBLEEM_DIR=../autobleem-develop ./make_rpi64.sh # ...and drop the result into AutoBleem's emu-arm64/
+```
+
+Result: `build_rpi64/dist/`. This fork's dynarec and NEON GPU/GTE code are 32-bit ARM assembly with no
+aarch64 backend, so the 64-bit Pi build has no dynarec and no NEON - it runs the C interpreter with the
+`peops` GPU, the same code path as the Windows dev build, just cross-compiled. Slower per clock than the
+32-bit Pi's dynarec+NEON build, but correct.
+
 **PlayStation Classic** - Sony's toolchain, `PCSXAB_GLES=ON` (what the old `config.mak.autobleem` did:
 EGL on the Weston surface SDL hands over, `gpu_gles.so` included). The toolchain lives on the build server,
 so this one builds over ssh:
