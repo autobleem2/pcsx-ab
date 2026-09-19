@@ -599,8 +599,12 @@ int plat_sdl_init(void)
 #elif defined(HAVE_GLES) && defined(SDL_VIDEO_DRIVER_WAYLAND)
   /* PlayStation Classic: hand SDL's Wayland surface to gl_platform.c, which puts an EGL window on it.
    * A build without GLES (the Raspberry Pi, on KMSDRM) has no gl_platform.c and no wl_* members in
-   * SDL_SysWMinfo; it draws through the SDL window surface instead and never gets here. */
-  (void)wminfo;
+   * SDL_SysWMinfo; it draws through the SDL window surface instead and never gets here.
+   * The version has to be the headers' before the call: SDL 2.0.6+ refuses a Wayland query from an
+   * app declaring an older (or, as it was here, an uninitialised) version - "Version must be 2.0.6 or
+   * newer", no display, and a segfault at the first frame - and whether uninitialised stack passed
+   * that check depended on the compiler (the gcc-8 build happened to, the gcc-6 build did not). */
+  SDL_VERSION(&wminfo.version);
   ret = SDL_GetWindowWMInfo(sdl2_window, &wminfo);
   SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Couldn't get window information: %s", SDL_GetError());
   //printf("SDLGWrest %n", ret);
