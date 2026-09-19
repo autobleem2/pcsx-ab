@@ -12,14 +12,15 @@
 # path, so C:\sysGCC\raspberry64\bin deliberately does NOT go on PATH: its rm.exe/mkdir.exe/make.exe would
 # shadow the MSYS2 ones and break this script.
 #
-#   ./make_rpi64.sh            full rebuild
-#   ./make_rpi64.sh -k         keep build_rpi64/ and just rebuild what changed
+#   ./make_rpi.sh            rebuild what changed (build_rpi/ is kept; ninja does the rest)
+#   ./make_rpi.sh --clean    wipe build_rpi/ first, a full rebuild (-k, the old spelling of keeping it,
+#                            is still accepted)
 #   AUTOBLEEM_DIR=../autobleem-develop ./make_rpi64.sh
 #                              ...and copy the result into that checkout's payload_rpi/Autobleem/bin/emu-arm64/
 set -e
 cd "$(dirname "$0")"
 
-if [ "${1:-}" != "-k" ]; then
+if [ "${1:-}" = "--clean" ]; then
     rm -rf ./build_rpi64
 fi
 mkdir -p build_rpi64

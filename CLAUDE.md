@@ -70,7 +70,7 @@ third_party/libchdr/        vendored upstream libchdr (BSD) + deps/{lzma,zstd}, 
 ## Building and running
 
 ```bash
-./make_rpi.sh            # clean cross build; -k incremental; AUTOBLEEM_DIR=... copies into AutoBleem
+./make_rpi.sh            # incremental cross build (--clean wipes); AUTOBLEEM_DIR=... copies into AutoBleem
 ./make_rpi64.sh          # same, for the 64-bit Pi; copies into AutoBleem's emu-arm64/ instead of emu/
 ./make_win.sh            # Debug build + runtime DLLs next to the exe
 ```
