@@ -28,8 +28,14 @@ configure() { # configure BUILD_DIR ARGS...
             rm -rf "$dir"
         fi
     fi
-    cmake -S . -B "$dir" -G Ninja -DCMAKE_BUILD_TYPE=Release "$@"
+    cmake -S . -B "$dir" -G Ninja -DCMAKE_BUILD_TYPE=Release "${LAUNCHER[@]}" "$@"
 }
+# sccache in front of the compiler when it is there (AutoBleem's build image has it and mounts the cache
+# from the host; AutoBleem's ci/build.sh does the same). AB_NO_SCCACHE=1 builds without.
+LAUNCHER=()
+if [ -z "${AB_NO_SCCACHE:-}" ] && command -v sccache >/dev/null 2>&1; then
+    LAUNCHER=(-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache)
+fi
 
 dist() { # dist BUILD_DIR STRIP - the stripped emulator and plugins
     local dir="$1" strip="$2" so
