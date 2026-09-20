@@ -613,12 +613,16 @@ int LoadCdrom() {
 	fake_bios_gpu_setup();
 
 	if (!Config.HLE) {
+		if (psxRegs.pc != 0x80030000) // BiosBootBypass'ed or custom BIOS?
+			return 0;
 		// SlowBoot (the default here - the console shows the logos) leaves the shell to run from
-		// 0x80030000; without it return into the kernel past the shell, as upstream pcsx-rearmed always
-		// does. A homebrew disc's custom logo can break the shell, which is what the option is for.
-		if (!Config.SlowBoot)
-			psxRegs.pc = psxRegs.GPR.n.ra;
-		return 0;
+		// 0x80030000. Without it the executable is loaded below and the CPU set to its entry, the way
+		// upstream pcsx-rearmed fast-boots with a real BIOS: the kernel is initialised, the shell (the
+		// logos) and the kernel's own CD boot never run. Returning into the kernel past the shell
+		// (pc = ra, the 2013 way) left a disc without licence data (PSn00bSDK homebrew - Tetrade,
+		// AutoBleem's sample) on a black screen; loading it here boots it.
+		if (Config.SlowBoot)
+			return 0;
 	}
 
 	time[0] = itob(0); time[1] = itob(2); time[2] = itob(0x10);
@@ -669,6 +673,8 @@ int LoadCdrom() {
 
 	memcpy(&tmpHead, buf + 12, sizeof(EXE_HEADER));
 
+	SysPrintf("manual booting '%s' pc=%x t_addr=%x t_size=%x\n", exename, SWAP32(tmpHead.pc0),
+		SWAP32(tmpHead.t_addr), SWAP32(tmpHead.t_size));
 	psxRegs.pc = SWAP32(tmpHead.pc0);
 	psxRegs.GPR.n.gp = SWAP32(tmpHead.gp0);
 	psxRegs.GPR.n.sp = SWAP32(tmpHead.s_addr); 
