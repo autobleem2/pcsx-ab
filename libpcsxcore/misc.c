@@ -673,6 +673,8 @@ int LoadCdrom() {
 
 	memcpy(&tmpHead, buf + 12, sizeof(EXE_HEADER));
 
+	SysPrintf("manual booting '%s' pc=%x t_addr=%x t_size=%x\n", exename, SWAP32(tmpHead.pc0),
+		SWAP32(tmpHead.t_addr), SWAP32(tmpHead.t_size));
 	psxRegs.pc = SWAP32(tmpHead.pc0);
 	psxRegs.GPR.n.gp = SWAP32(tmpHead.gp0);
 	psxRegs.GPR.n.sp = SWAP32(tmpHead.s_addr); 
