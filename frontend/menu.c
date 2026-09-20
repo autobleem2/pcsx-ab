@@ -595,6 +595,7 @@ static const struct {
 	CE_CONFIG_VAL(SpuIrq),
 	CE_CONFIG_VAL(RCntFix),
 	CE_CONFIG_VAL(VSyncWA),
+	CE_CONFIG_VAL(SlowBoot),
 	CE_CONFIG_VAL(Cpu),
 	CE_INTVAL(region),
 	CE_INTVAL_V(g_scaler, 3),
