@@ -613,8 +613,11 @@ int LoadCdrom() {
 	fake_bios_gpu_setup();
 
 	if (!Config.HLE) {
-		// skip BIOS logos
-		//psxRegs.pc = psxRegs.GPR.n.ra;
+		// SlowBoot (the default here - the console shows the logos) leaves the shell to run from
+		// 0x80030000; without it return into the kernel past the shell, as upstream pcsx-rearmed always
+		// does. A homebrew disc's custom logo can break the shell, which is what the option is for.
+		if (!Config.SlowBoot)
+			psxRegs.pc = psxRegs.GPR.n.ra;
 		return 0;
 	}
 
