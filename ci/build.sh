@@ -8,7 +8,8 @@
 #   psc      build_psc/     the PlayStation Classic (toolchains/psc, PCSXAB_PSC_TOOLCHAIN - /opt/psc in the image)
 #   rpi      build_rpi/     Raspberry Pi 32-bit (toolchains/rpi, Debian's arm-linux-gnueabihf)
 #   rpi64    build_rpi64/   Raspberry Pi 64-bit (toolchains/rpi64, Debian's aarch64-linux-gnu)
-#   all      the three
+#   pcusb    build_pcusb/   AutoBleem's 32-bit PC USB stick (toolchains/pcusb, Debian's i686-linux-gnu)
+#   all      the four
 #
 #   AB_JOBS=N      parallel jobs (default: nproc);  AB_CLEAN=1  wipe the build dir first
 set -euo pipefail
@@ -84,13 +85,22 @@ build_rpi() { # build_rpi armhf|arm64
     esac
 }
 
-[ $# -gt 0 ] || { sed -n '2,14p' "$0"; exit 2; }
+
+build_pcusb() { # AutoBleem's 32-bit PC USB stick: i686 Linux with Debian's cross compiler (the image's pcusb stage)
+    echo "==> pcsx-ab pcusb: configure + build (build_pcusb)"
+    configure build_pcusb -DCMAKE_TOOLCHAIN_FILE=toolchains/pcusb/PcUsbToolchain.cmake
+    ninja -C build_pcusb -j "$JOBS"
+    dist build_pcusb "i686-linux-gnu-strip"
+    file build_pcusb/dist/pcsx-ab | grep -q 'ELF 32-bit LSB.*Intel 80386'
+}
+
+[ $# -gt 0 ] || { sed -n '2,15p' "$0"; exit 2; }
 targets=()
 for t in "$@"; do
     case "$t" in
-        all) targets+=(psc rpi rpi64) ;;
-        psc|rpi|rpi64) targets+=("$t") ;;
-        *) echo "unknown target: $t (psc, rpi, rpi64, all)" >&2; exit 2 ;;
+        all) targets+=(psc rpi rpi64 pcusb) ;;
+        psc|rpi|rpi64|pcusb) targets+=("$t") ;;
+        *) echo "unknown target: $t (psc, rpi, rpi64, pcusb, all)" >&2; exit 2 ;;
     esac
 done
 for t in "${targets[@]}"; do
@@ -98,5 +108,6 @@ for t in "${targets[@]}"; do
         psc)   build_psc ;;
         rpi)   build_rpi armhf ;;
         rpi64) build_rpi arm64 ;;
+        pcusb) build_pcusb ;;
     esac
 done
