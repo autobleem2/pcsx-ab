@@ -53,7 +53,7 @@ jobs:
       targets: ${{ steps.t.outputs.json }}
       version: ${{ steps.v.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: t
@@ -89,23 +89,23 @@ jobs:
       SCCACHE_DIR: /sccache
       SCCACHE_CACHE_SIZE: 2G
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       # sccache with a local on-disk cache, persisted across runs by actions/cache. We deliberately do NOT
       # use sccache's built-in GitHub-Actions-cache backend: GitHub retired the legacy artifact-cache API
-      # (v1) that it calls, so it returns "services aren't available" and fails every build. actions/cache@v4
+      # (v1) that it calls, so it returns "services aren't available" and fails every build. actions/cache@v6
       # uses the current cache service, and ci/build.sh already runs sccache from PATH honouring SCCACHE_DIR,
       # so nothing in the script changes - and a cache miss/outage is just a cold compile, never a failure.
       - name: Restore sccache cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /sccache
           key: sccache-${{ matrix.target }}-${{ github.sha }}
           restore-keys: sccache-${{ matrix.target }}-
       - name: Build ${{ matrix.target }}
         run: ci/build.sh ${{ matrix.target }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.target }}
           path: build_${{ matrix.target }}/dist/
@@ -125,7 +125,7 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: msys2/setup-msys2@v2
@@ -149,7 +149,7 @@ jobs:
           cp build_win_rel/pcsx-ab.exe winstage/
           for dll in $(ldd build_win_rel/pcsx-ab.exe | awk '/ucrt64/ {print $3}'); do cp -u "$dll" winstage/; done
           cp build_win_rel/plugins/*.dll winstage/plugins/ 2>/dev/null || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-win
           path: winstage/
@@ -169,10 +169,10 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: dist-*
       - name: Reassemble and package
@@ -190,7 +190,7 @@ jobs:
           fi
           tools/make_packages.sh --version "${{ needs.plan.outputs.version }}"
           ls -l dist/packages
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: packages
           path: dist/packages/
@@ -208,7 +208,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: packages
           path: packages
@@ -242,11 +242,11 @@ jobs:
     env:
       REPO_DIR: /srv/autobleem-repo
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: autobleem2/autobleem
           path: autobleem
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: packages
           path: dist/packages
