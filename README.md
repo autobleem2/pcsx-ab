@@ -1,14 +1,24 @@
-PCSX-ReARMed - yet another PCSX fork
-====================================
+pcsx-ab - the PlayStation 1 emulator for AutoBleem 2
+====================================================
 
-**THIS IS A MODIFIED VERSION OF PCSX SONY'S VERSION MADE BY THE AUTOBLEEM TEAM**
+**pcsx-ab is a fork of [PCSX-ReARMed](http://notaz.gp2x.de/pcsx_rearmed.php) maintained by the AutoBleem
+team.** It is the classic PS1 emulator [AutoBleem 2](https://github.com/autobleem2/autobleem) launches on
+the PlayStation Classic, Raspberry Pi and PC: AutoBleem's launch scripts drive it, and it reads AutoBleem's
+`pcsx.cfg`, memory cards and save-state layout. The successor emulator is
+[pcsx-abnxt](https://github.com/autobleem2/pcsx-abnxt).
 
-- screemer
-- nex
-- mGGk
-- ThaFridge
+Authors: screemer, nex, mGGk, ThaFridge and the AutoBleem contributors, on top of the PCSX / PCSX-ReARMed
+authors.
 
-*see [readme.txt](readme.txt) for more complete documentation*
+*See [readme.txt](readme.txt) for the upstream PCSX-ReARMed documentation.*
+
+License
+-------
+
+GPL-3.0-or-later (see [LICENSE](LICENSE)). The core emulator sources are licensed under the GNU GPL "version
+2 of the License, or (at your option) any later version" (upstream PCSX-ReARMed - see [COPYING](COPYING) and
+the per-file headers); AutoBleem 2 distributes the combined work under GPL-3.0-or-later, which that "or
+later" option permits. Bundled third-party components keep their own licences (see `third_party/*/LICENSE`).
 
 Building
 --------
@@ -88,14 +98,15 @@ Options (`cmake -L`): `PCSXAB_ENABLE_MENU`, `PCSXAB_NEON`, `PCSXAB_DYNAREC`, `PC
 `PCSXAB_SOUND_DRIVERS` (sdl alsa oss pulseaudio), `PCSXAB_GLES`, `PCSXAB_PLUGINS`, `PCSXAB_LINK_MAP`, `PCSXAB_CHD`.
 
 **CHD images** (`PCSXAB_CHD`, on by default): `.chd` discs from `chdman createcd` load like any other image
-(`-cdfile game.chd`), multi-track with CD audio included. The reader is `handlechd`/`cdread_chd` in
-`libpcsxcore/cdriso.c` on top of the vendored `third_party/libmamecd` (a libchdr fork, BSD), built static
-with its FLAC/lzma codecs so no extra library is needed on the console or the Pi.
+(`-cdfile game.chd`), multi-track with CD audio included. The reader is `cdread_chd` in
+`libpcsxcore/cdriso.c` on top of the vendored `third_party/libchdr` (upstream libchdr with its zstd, zlib and
+LZMA-SDK codecs, and header-only FLAC), built static so no extra library is needed on the console or the Pi.
 
-**Status:** the Pi cross build compiles and links against exactly the libraries a stock Pi OS has
-(`libSDL2-2.0.so.0`, `libpng16`, `libz`) but has not yet been run on a Pi. The SDL2 renderer video path it
-uses has been run on the PC build (Re-Volt boots from `EBOOT.PBP` and draws), so what remains to verify on
-the Pi is the platform, not the code path.
+**Status:** pcsx-ab is the emulator AutoBleem 2 ships and runs on real hardware - the PlayStation Classic
+(GLES on Weston) and the Raspberry Pi (SDL2 renderer); the Windows/PC build runs games through the
+interpreter for development. Continuous integration (`.github/workflows/build.yml`) builds the four cross
+targets - `psc`, `rpi`, `rpi64`, `pcusb` - in AutoBleem's shared toolchain image and a native Windows build
+on GitHub Actions, and packages each for AutoBleem's download site.
 
 PCSX ReARMed is yet another PCSX fork based on the PCSX-Reloaded project,
 which itself contains code from PCSX, PCSX-df and PCSX-Revolution. This
