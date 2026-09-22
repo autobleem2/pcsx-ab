@@ -1,0 +1,220 @@
+# pcsx-ab CI - the pilot for the autobleem2 org migration (docs/ci-org-migration-plan.md in the launcher
+# repo). The four Linux targets build inside the shared autobleem-build image, exactly as `ci/build.sh
+# <target>` does on the build server; the Windows build runs natively on a GitHub-hosted windows-latest
+# runner with MSYS2 UCRT64, the way make_win.sh builds it on a PC (until now the only way to get the .exe).
+# `package` reassembles all of them into the site packages (tools/make_packages.sh -> one tarball/zip per
+# target); `publish` (self-hosted, tag or manual only) pushes emu/pcsx-ab/ to the download site.
+#
+# Nothing runs until the repository variable AB_CI_ENABLED is 'true' (Settings -> Secrets and variables ->
+# Actions -> Variables): the master switch, so this can be merged while the pipeline is still paused.
+#
+# Runners: GitHub's ubuntu-24.04 by default (public repo = free, unlimited, parallel) plus windows-latest
+# for the .exe; the build server only when a manual run asks for it, and always for publishing (the site is
+# the server's disk). Pull requests only ever run on hosted runners - a self-hosted runner on a public repo
+# must never execute a fork's code.
+name: build
+
+on:
+  push:
+    branches: [develop, master]
+    tags: ['v*']
+  pull_request:
+    branches: [develop, master]
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: where to build the Linux targets
+        type: choice
+        options: [github, self-hosted]
+        default: github
+      targets:
+        description: targets to build (space separated; psc rpi rpi64 pcusb win; empty = all)
+        type: string
+        default: ''
+      publish:
+        description: publish the packages to the site under emu/pcsx-ab/ (self-hosted only)
+        type: boolean
+        default: false
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/autobleem2/autobleem-build:latest
+
+jobs:
+  # which Linux targets to build (the dispatch list minus win, else all four), and the version every package
+  # carries: <date>-<short sha>, or the tag on a v* tag (this repository has no tags on develop)
+  plan:
+    if: vars.AB_CI_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    outputs:
+      targets: ${{ steps.t.outputs.json }}
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: t
+        run: |
+          t="${{ inputs.targets }}"
+          [ -n "$t" ] || t="psc rpi rpi64 pcusb win"
+          # win builds in its own job; the Linux matrix takes the rest
+          lin="$(printf '%s\n' $t | grep -vx win || true)"
+          echo "json=$(printf '%s\n' $lin | jq -R . | jq -cs 'map(select(length>0))')" >> "$GITHUB_OUTPUT"
+      - id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: ${{ matrix.target }}
+    needs: plan
+    if: needs.plan.outputs.targets != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.plan.outputs.targets) }}
+    runs-on: ${{ (github.event_name != 'pull_request' && inputs.runner == 'self-hosted') && 'self-hosted' || 'ubuntu-24.04' }}
+    container:
+      image: ghcr.io/autobleem2/autobleem-build:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # sccache on the GitHub Actions cache (the host mount only helps the self-hosted runner); ci/build.sh
+      # already uses sccache when it is on PATH and sets no SCCACHE_DIR of its own, so this needs no script
+      # change - the action provides the cache backend and env.
+      - uses: mozilla-actions/sccache-action@v0.0.6
+      - name: Build ${{ matrix.target }}
+        run: ci/build.sh ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: build_${{ matrix.target }}/dist/
+          retention-days: 30
+
+  # the Windows .exe, natively on a hosted windows runner with MSYS2 UCRT64 - the same toolchain make_win.sh
+  # uses, but a Release build into build_win_rel (make_packages prefers that over the Debug build_win). The
+  # shipped files (exe + runtime DLLs + plugin DLLs) are staged and uploaded; the skin comes from the source
+  # tree in the package job.
+  windows:
+    needs: plan
+    if: >-
+      vars.AB_CI_ENABLED == 'true' &&
+      (inputs.targets == '' || contains(format(' {0} ', inputs.targets), ' win '))
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-SDL2
+            mingw-w64-ucrt-x86_64-libpng
+      - name: Build (Release)
+        run: |
+          cmake -G Ninja -S . -B build_win_rel -DCMAKE_BUILD_TYPE=Release
+          cmake --build build_win_rel
+      - name: Stage the shippable files
+        run: |
+          mkdir -p winstage/plugins
+          cp build_win_rel/pcsx-ab.exe winstage/
+          for dll in $(ldd build_win_rel/pcsx-ab.exe | awk '/ucrt64/ {print $3}'); do cp -u "$dll" winstage/; done
+          cp build_win_rel/plugins/*.dll winstage/plugins/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-win
+          path: winstage/
+          retention-days: 30
+
+  # reassemble every build and make the site packages (one tarball/zip per target + a manifest json). The
+  # artifacts drop file modes, so the emulator binary gets its x bit back before make_packages tars it. Runs
+  # even if the Windows job was skipped or failed - make_packages just leaves out a target whose dist is
+  # missing.
+  package:
+    needs: [plan, build, windows]
+    if: ${{ always() && needs.plan.result == 'success' && needs.build.result != 'failure' }}
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/autobleem2/autobleem-build:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+      - name: Reassemble and package
+        run: |
+          for t in psc rpi rpi64 pcusb; do
+            [ -d "dist-$t" ] || continue
+            mkdir -p "build_$t"
+            rm -rf "build_$t/dist"
+            mv "dist-$t" "build_$t/dist"
+            [ -f "build_$t/dist/pcsx-ab" ] && chmod +x "build_$t/dist/pcsx-ab" || true
+          done
+          if [ -d dist-win ]; then
+            mkdir -p build_win_rel
+            cp -a dist-win/. build_win_rel/
+          fi
+          tools/make_packages.sh --version "${{ needs.plan.outputs.version }}"
+          ls -l dist/packages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: dist/packages/
+          retention-days: 30
+
+  # publish emu/pcsx-ab/ to the download site. Self-hosted only (the site is the build server's disk); runs
+  # on a v* tag or a manual run with publish=true, never on a PR. Uses the launcher repo's repo_publish.sh.
+  publish:
+    needs: [plan, package]
+    if: >-
+      inputs.runner != 'github' && (
+        startsWith(github.ref, 'refs/tags/v') ||
+        (github.event_name == 'workflow_dispatch' && inputs.publish)
+      )
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/autobleem2/autobleem-build:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      volumes:
+        - /home/claude/autobleem-repo:/srv/autobleem-repo
+    env:
+      REPO_DIR: /srv/autobleem-repo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: autobleem2/autobleem
+          path: autobleem
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: dist/packages
+      - name: Publish to the site
+        run: autobleem/tools/repo_publish.sh --local pcsx-ab "${{ needs.plan.outputs.version }}" dist/packages/*
