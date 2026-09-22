@@ -86,15 +86,23 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     env:
-      SCCACHE_GHA_ENABLED: 'true'
+      SCCACHE_DIR: /sccache
+      SCCACHE_CACHE_SIZE: 2G
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      # sccache on the GitHub Actions cache (the host mount only helps the self-hosted runner); ci/build.sh
-      # already uses sccache when it is on PATH and sets no SCCACHE_DIR of its own, so this needs no script
-      # change - the action provides the cache backend and env.
-      - uses: mozilla-actions/sccache-action@v0.0.6
+      # sccache with a local on-disk cache, persisted across runs by actions/cache. We deliberately do NOT
+      # use sccache's built-in GitHub-Actions-cache backend: GitHub retired the legacy artifact-cache API
+      # (v1) that it calls, so it returns "services aren't available" and fails every build. actions/cache@v4
+      # uses the current cache service, and ci/build.sh already runs sccache from PATH honouring SCCACHE_DIR,
+      # so nothing in the script changes - and a cache miss/outage is just a cold compile, never a failure.
+      - name: Restore sccache cache
+        uses: actions/cache@v4
+        with:
+          path: /sccache
+          key: sccache-${{ matrix.target }}-${{ github.sha }}
+          restore-keys: sccache-${{ matrix.target }}-
       - name: Build ${{ matrix.target }}
         run: ci/build.sh ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
