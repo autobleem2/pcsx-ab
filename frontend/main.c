@@ -6,6 +6,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 #include <unistd.h>
@@ -567,6 +568,12 @@ int emu_core_preinit(void) {
 }
 
 int emu_core_init(void) {
+    // AutoBleem: the package's version first (AB_VERSION, from the launcher), then this emulator's own build
+    {
+        const char *ab_version = getenv("AB_VERSION");
+        if (ab_version && *ab_version)
+            SysPrintf("AutoBleem %s: ", ab_version);
+    }
     SysPrintf("Starting PCSX-ReARMed " REV "\n");
 
 #ifndef NO_FRONTEND

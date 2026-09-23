@@ -10,6 +10,7 @@
 
 #define _GNU_SOURCE 1
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #ifdef _WIN32
@@ -2161,7 +2162,12 @@ static void draw_frame_main(void)
 
 static void draw_frame_credits(void)
 {
-	smalltext_out16(4, 1, "build: " __DATE__ " " __TIME__ " " REV, 0xe7fc);
+	// AutoBleem: the package's version (AB_VERSION, exported by the launcher), as every program on the
+	// stick shows it; this emulator's own describe only when started without the launcher
+	const char *ab_version = getenv("AB_VERSION");
+	char ab_buff[128];
+	snprintf(ab_buff, sizeof(ab_buff), "AutoBleem %s", ab_version && *ab_version ? ab_version : REV);
+	smalltext_out16(4, 1, ab_buff, 0xe7fc);
 }
 
 static const char credits_text[] = 
