@@ -149,6 +149,31 @@ jobs:
           cp build_win_rel/pcsx-ab.exe winstage/
           for dll in $(ldd build_win_rel/pcsx-ab.exe | awk '/ucrt64/ {print $3}'); do cp -u "$dll" winstage/; done
           cp build_win_rel/plugins/*.dll winstage/plugins/ 2>/dev/null || true
+      # unsigned: sign-win below signs pcsx-ab.exe and uploads dist-win
+      - uses: actions/upload-artifact@v7
+        with:
+          name: win-unsigned
+          path: winstage/
+          retention-days: 7
+
+  # pcsx-ab.exe's Authenticode signature through SignPath (.signpath/artifact-configuration.xml;
+  # autobleem-build's signpath-sign action has the rules): a v* tag must come back signed, a develop build
+  # ships unsigned when nobody approves it within the hour. Needs only the windows job - all hosted runners,
+  # which SignPath requires (the Linux build may run self-hosted on a manual run; it is not in this chain).
+  sign-win:
+    needs: [plan, windows]
+    runs-on: ubuntu-24.04
+    permissions: { actions: read, contents: read }
+    steps:
+      - uses: autobleem2/autobleem-build/.github/actions/signpath-sign@develop
+        with:
+          artifact: win-unsigned
+          path: winstage
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ github.event_name != 'pull_request' && vars.SIGNPATH_ORGANIZATION_ID || '' }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
+          required: ${{ startsWith(github.ref, 'refs/tags/v') }}
       - uses: actions/upload-artifact@v7
         with:
           name: dist-win
@@ -160,8 +185,8 @@ jobs:
   # even if the Windows job was skipped or failed - make_packages just leaves out a target whose dist is
   # missing.
   package:
-    needs: [plan, build, windows]
-    if: ${{ always() && needs.plan.result == 'success' && needs.build.result != 'failure' }}
+    needs: [plan, build, sign-win]
+    if: ${{ always() && needs.plan.result == 'success' && needs.build.result != 'failure' && needs.sign-win.result != 'failure' }}
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/autobleem2/autobleem-build:${{ startsWith(github.ref, 'refs/tags/v') && 'latest' || 'develop' }}
