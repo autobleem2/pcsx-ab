@@ -222,6 +222,22 @@ jobs:
             --title "pcsx-ab ${GITHUB_REF_NAME}" --generate-notes $prerelease \
             packages/*
 
+  # the rolling development build: every successful build of develop replaces the assets of this repository's
+  # `nightly` pre-release (autobleem-build's nightly-release action), which autobleem-appliance's nightly
+  # assembly fetches the way it fetches a v* release. Never for a pull request or a tag.
+  nightly:
+    if: github.ref == 'refs/heads/develop' && github.event_name != 'pull_request'
+    needs: [plan, package]
+    runs-on: ubuntu-24.04
+    permissions: { contents: write }
+    steps:
+      - uses: actions/download-artifact@v8
+        with: { name: packages, path: out }
+      - uses: autobleem2/autobleem-build/.github/actions/nightly-release@master
+        with:
+          files: out/*
+          version: ${{ needs.plan.outputs.version }}
+
   # publish emu/pcsx-ab/ to the download site. Self-hosted only (the site is the build server's disk); runs
   # on a v* tag or a manual run with publish=true, never on a PR. Uses the launcher repo's repo_publish.sh.
   publish:
