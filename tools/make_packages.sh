@@ -39,7 +39,10 @@ pack_linux() { # pack_linux <dist dir> <platform>
         echo "  $plat: no $dist/pcsx-ab, skipped" >&2
         return
     fi
-    tar -C "$dist" --owner=0 --group=0 --mode='u=rwX,go=rX' -czf "$OUT/$name" pcsx-ab plugins
+    # abfeatures: what the launcher may hand over (frontend/ab_env.h) - without it the launcher uses none of it
+    local extra=()
+    [ -f "$dist/abfeatures" ] && extra+=(abfeatures)
+    tar -C "$dist" --owner=0 --group=0 --mode='u=rwX,go=rX' -czf "$OUT/$name" pcsx-ab plugins "${extra[@]}"
     files+=("$plat:$name")
     echo "  $plat: $name ($(du -h "$OUT/$name" | cut -f1))"
 }
@@ -56,6 +59,7 @@ pack_windows() {
     cp "$src/pcsx-ab.exe" "$src"/*.dll "$stage/pcsx-ab/"
     cp "$src"/plugins/*.dll "$stage/pcsx-ab/plugins/"
     cp frontend/pandora/skin/* "$stage/pcsx-ab/skin/"
+    cp frontend/abfeatures "$stage/pcsx-ab/"
     # python's zipfile: MSYS2 has no zip, the Docker image no 7z
     python3 -c "import shutil, sys; shutil.make_archive(sys.argv[1], 'zip', sys.argv[2], 'pcsx-ab')" "$OUT/${name%.zip}" "$stage"
     rm -rf "$stage"
