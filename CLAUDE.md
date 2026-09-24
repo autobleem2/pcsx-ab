@@ -96,6 +96,26 @@ Wayland dev files). The distro CMake is 3.10; `~/opt/cmake` (3.31) is what `make
 synced to `~/pcsx-ab`, built in `~/pcsx-ab/build_psc` (unstripped binaries stay there for gdb). No ninja
 there - Unix Makefiles, `-j2`.
 
+## What the launcher hands over (2026-09-24, AutoBleem's quiet-stick plan)
+
+AutoBleem writes to the stick only when the user's state changes, and the emulator is asked to help
+through the environment - an older launcher sets none of these and an older emulator ignores them. The
+launcher reads the **`abfeatures`** file next to the binary (`frontend/abfeatures`; the getters in `frontend/ab_env.h`, copied by every packaging script:
+`ci/build.sh`, `make_rpi*.sh`, `make_win.sh`) and sets only what it lists:
+
+- `AB_EXIT_DIR` (`exitdir`): the resume point of the way out - `sstates/<name>.000`,
+  `screenshots/<name>.png`, `filename.txt` (last: "ended cleanly"), `lastcdimg.txt` - goes there, in
+  RAM, in the `.pcsx` layout; the launcher copies it to the stick only when the player keeps a slot.
+- `AB_MEMCARD_DIR` (`memcarddir`): the game's memory-card set (`Games/!MemCards/<set>`), played where it
+  is - `Config.Mcd1` points into it - instead of being copied in and out around the run.
+- `AB_LOAD_STATE` (`loadstate`): the kept slot to resume from, loaded like `-loadf` (and `-load` is then
+  ignored) instead of the launcher copying it to slot 0 first.
+
+Only the cards in use are created (no `card2.mcd`, which is "none"). Not yet run on a console.
+
+With an exit dir `filename.txt` is written at the exit only (not at start as well), and
+`lastcdimg.txt` goes with it.
+
 ## Things learned the hard way
 
 - **GCC 14 vs Sony's GCC 8**: `-fcommon` is required (tentative definitions in headers, `.comm` in
