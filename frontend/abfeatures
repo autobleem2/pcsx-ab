@@ -1,0 +1,5 @@
+# What this pcsx-ab build takes from AutoBleem's launcher through the environment, one per line - the
+# launcher reads this file next to the binary and hands over only what is listed here (frontend/ab_env.h)
+exitdir
+memcarddir
+loadstate

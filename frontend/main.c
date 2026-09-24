@@ -36,6 +36,7 @@
 #include "../plugins/cdrcimg/cdrcimg.h"
 #include "../plugins/dfsound/spu_config.h"
 #include "revision.h"
+#include "ab_env.h"
 
 #ifndef NO_FRONTEND
 
@@ -378,15 +379,31 @@ void do_emu_action(void) {
                 return;
             }
             if (holdResetEvent) return;
-            ret = emu_auto_save_state(0);
+            if (ab_exit_dir() != NULL) {
+                // AutoBleem's $AB_EXIT_DIR: the resume point in RAM, the .pcsx layout (ab_env.h)
+                char fmt[MAXPATHLEN], fname[MAXPATHLEN];
+                snprintf(fname, sizeof(fname), "%s/sstates", ab_exit_dir());
+                mkdir(ab_exit_dir(), 0755);
+                mkdir(fname, 0755);
+                snprintf(fname, sizeof(fname), "%s/screenshots", ab_exit_dir());
+                mkdir(fname, 0755);
+                snprintf(fmt, sizeof(fmt), "%s/sstates/%%.32s-%%.9s.000", ab_exit_dir());
+                get_gameid_filename(fname, sizeof(fname), fmt, 0);
+                ret = SaveStateWork(fname);
+                SysPrintf("* %s \"%s\" (exit)\n", ret == 0 ? "saved" : "failed to save", fname);
+            } else
+                ret = emu_auto_save_state(0);
             snprintf(hud_msg, sizeof(hud_msg), ret == 0 ? "LOADED" : "FAIL!");
             if (ret) {
                 char path[MAXPATHLEN];
                 struct stat st;
 
-                snprintf(path, sizeof(path), "."
-                        PCSX_DOT_DIR
-                        "filename.txt");
+                if (ab_exit_dir() != NULL)
+                    snprintf(path, sizeof(path), "%s/filename.txt", ab_exit_dir());
+                else
+                    snprintf(path, sizeof(path), "."
+                            PCSX_DOT_DIR
+                            "filename.txt");
                 ret = stat(path, &st);
                 if (!ret) {
                     remove(path);
@@ -398,8 +415,13 @@ void do_emu_action(void) {
                 int w, h, bpp;
 
                 scrbuf = pl_prepare_screenshot(&w, &h, &bpp);
-                get_gameid_filename(buf, sizeof(buf),
-                                    "." SCSHOT_DIR "%.32s-%.9s.png", 0);
+                if (ab_exit_dir() != NULL) {
+                    char fmt[MAXPATHLEN];
+                    snprintf(fmt, sizeof(fmt), "%s/screenshots/%%.32s-%%.9s.png", ab_exit_dir());
+                    get_gameid_filename(buf, sizeof(buf), fmt, 0);
+                } else
+                    get_gameid_filename(buf, sizeof(buf),
+                                        "." SCSHOT_DIR "%.32s-%.9s.png", 0);
                 ret = -1;
                 if (scrbuf != 0 && bpp == 16)
                     ret = writepng(buf, scrbuf, w, h);
@@ -631,7 +653,12 @@ static void check_memcards(void) {
     int i;
 
     for (i = 1; i <= 2; i++) {
-        snprintf(buf, sizeof(buf), ".%scard%d.mcd", MEMCARD_DIR, i);
+        // AutoBleem: the card this run plays with (Config.Mcd1 - the game's own, or the set $AB_MEMCARD_DIR
+        // names); no card2.mcd, which is "none" and nothing reads
+        const char *card = i == 1 ? Config.Mcd1 : Config.Mcd2;
+        if (card[0] == 0 || strcmp(card, "none") == 0)
+            continue;
+        snprintf(buf, sizeof(buf), "%s", card);
 
         f = fopen(buf, "rb");
         if (f == NULL) {
@@ -802,6 +829,11 @@ int main(int argc, char *argv[]) {
             ".png");
     sprintf(ok_image, "%s%s%s%s", DISK_IMG_DIR, "OK_SD_Btn_", lang_list[language - 1], ".png");
 
+    // AutoBleem's $AB_LOAD_STATE: the kept resume slot, read where it is instead of copied to slot 0 first
+    if (ab_load_state() != NULL && loadst_f == NULL) {
+        loadst_f = ab_load_state();
+        loadst = 0;
+    }
     if (cdfile) {
         printf("set_cd_image(cdfile)\n");
         set_cd_image(cdfile);
@@ -844,8 +876,9 @@ int main(int argc, char *argv[]) {
     plugin_call_rearmed_cbs();
 
     CheckCdrom();
-    // save file
-    make_file_name();
+    // save file - with AutoBleem's $AB_EXIT_DIR only at the exit, where it means "ended cleanly"
+    if (ab_exit_dir() == NULL)
+        make_file_name();
     save_error(ERROR_PCSXCRITICALERROR, "Sorry, error occurred during running system...");
     SysReset();
 
@@ -1418,9 +1451,12 @@ void power_off(void) {
     char path[MAXPATHLEN];
     struct stat st;
 
-    snprintf(path, sizeof(path), "."
-            PCSX_DOT_DIR
-            "filename.txt");
+    if (ab_exit_dir() != NULL)
+        snprintf(path, sizeof(path), "%s/filename.txt", ab_exit_dir());
+    else
+        snprintf(path, sizeof(path), "."
+                PCSX_DOT_DIR
+                "filename.txt");
     if (stat(path, &st) == 0) {
         remove(path);
     }

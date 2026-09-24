@@ -26,6 +26,7 @@
 
 #include "main.h"
 #include "menu.h"
+#include "ab_env.h"
 #include "config.h"
 #include "plugin.h"
 #include "plugin_lib.h"
@@ -1059,6 +1060,9 @@ fail:
 				MEMCARD_DIR, memcards[memcard1_sel]);
 	}
 	strcpy(Config.Mcd2, "none");
+	// AutoBleem's $AB_MEMCARD_DIR: the game's memory-card set, played where it is (ab_env.h)
+	if (ab_memcard_dir() != NULL)
+		snprintf(Config.Mcd1, sizeof(Config.Mcd1), "%s/card1.mcd", ab_memcard_dir());
 	if (strcmp(mcd1_old, Config.Mcd1) || strcmp(mcd2_old, Config.Mcd2))
 		LoadMcds(Config.Mcd1, Config.Mcd2);
 	return ret;
@@ -3146,7 +3150,17 @@ int make_file_name(void)
 		return -1;
 	}
 
-	snprintf(path, sizeof(path), "." PCSX_DOT_DIR "filename.txt");
+	if (ab_exit_dir() != NULL) {
+		// AutoBleem's $AB_EXIT_DIR: the run's files in RAM, the disc in the drive next to them (ab_env.h)
+		snprintf(path, sizeof(path), "%s/lastcdimg.txt", ab_exit_dir());
+		f = fopen(path, "w");
+		if (f != NULL) {
+			fprintf(f, "%s\n", isofile);
+			fclose(f);
+		}
+		snprintf(path, sizeof(path), "%s/filename.txt", ab_exit_dir());
+	} else
+		snprintf(path, sizeof(path), "." PCSX_DOT_DIR "filename.txt");
 	f = fopen(path, "w");
 	if (f == NULL) {
 		return -1;

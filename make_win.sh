@@ -16,4 +16,5 @@ cmake --build build_win
 for dll in $(ldd build_win/pcsx-ab.exe | awk '/ucrt64/ {print $3}'); do
     cp -u "$dll" build_win/
 done
+cp -u frontend/abfeatures build_win/ # what the launcher may hand over (frontend/ab_env.h)
 echo "==> build_win/pcsx-ab.exe"

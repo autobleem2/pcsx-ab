@@ -33,6 +33,7 @@ mkdir -p build_rpi/dist/plugins
 for so in build_rpi/plugins/*.so; do
     "$STRIP" -o "build_rpi/dist/plugins/$(basename "$so")" "$so"
 done
+cp frontend/abfeatures build_rpi/dist/ # what the launcher may hand over (frontend/ab_env.h)
 echo "==> build_rpi/dist:"
 ls -l build_rpi/dist build_rpi/dist/plugins
 

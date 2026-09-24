@@ -44,6 +44,7 @@ dist() { # dist BUILD_DIR STRIP - the stripped emulator and plugins
     mkdir -p "$dir/dist/plugins"
     "$strip" -o "$dir/dist/pcsx-ab" "$dir/pcsx-ab"
     for so in "$dir"/plugins/*.so; do "$strip" -o "$dir/dist/plugins/$(basename "$so")" "$so"; done
+    cp frontend/abfeatures "$dir/dist/" # what the launcher may hand over (frontend/ab_env.h)
     echo "==> $dir/dist:"
     ls -l "$dir/dist" "$dir/dist/plugins" | sed 's/^/    /'
     file "$dir/dist/pcsx-ab" | sed 's/^/    /'
