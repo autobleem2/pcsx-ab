@@ -1552,6 +1552,14 @@ int LoadState(const char *file) {
 		SaveFuncs.close(f);
 		return -1;
 	}
+	// AutoBleem: pcsx-abnxt writes this layout too (its libpcsxcore/state_sony.c), and its header says
+	// "STv4 PCSXra". On the HLE BIOS each emulator keeps its own data in the BIOS area, laid out
+	// differently, so such a state cannot be continued here - the game starts from the beginning instead.
+	if (hle && strncmp("STv4 PCSXra", header, 11) == 0) {
+		printf("LoadState: pcsx-abnxt's state on the HLE BIOS, which cannot be continued here\n");
+		SaveFuncs.close(f);
+		return -1;
+	}
 	Config.HLE = hle;
 
 	if (Config.HLE)

@@ -123,6 +123,13 @@ there - Unix Makefiles, `-j2`.
   init unless `NDEBUG`.
 - `spu.c` called `tanh()` without `<math.h>` - on hard-float ARM that read the result from r0. Fixed; it
   shipped that way on the console.
+- **This emulator's save-state layout is the shared one** (2026-09-24): pcsx-abnxt writes and reads it too
+  (its `libpcsxcore/state_sony.c`), so a resume point either emulator left continues in the other. Nothing
+  here changed for that but one check in `LoadState`: a state with the HLE flag whose header says
+  `STv4 PCSXra` (nxt's) is refused - the HLE BIOS keeps its data in the BIOS area, laid out differently in
+  each emulator. nxt's states carry an extension after the disc-change state, which this `LoadState` never
+  reads. The Windows dev build (peops or unai) crashes a moment after loading any state, its own included
+  - not looked into; the console and the Pi are where states are tried.
 
 ## Working agreements (same as autobleem-develop)
 
