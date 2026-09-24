@@ -130,6 +130,20 @@ there - Unix Makefiles, `-j2`.
   each emulator. nxt's states carry an extension after the disc-change state, which this `LoadState` never
   reads. The Windows dev build (peops or unai) crashes a moment after loading any state, its own included
   - not looked into; the console and the Pi are where states are tried.
+- **A game's config has one source** (2026-09-24, the same in pcsx-abnxt; the comment above
+  `make_cfg_fname` has it): AutoBleem's `pcsx.cfg`, or the game's own `.pcsx/pcsx.custom.cfg`, which every
+  save in the menus writes ("Save settings for this game" - the three entries went to three files before:
+  `autobleem.cfg`, the global `pcsx.cfg` under the name "for loaded game", and nothing wrote the per-disc
+  `cfg/` file). The launcher shows the game's settings locked while it exists and deletes it on "Unlock".
+  `menu_init` and "Load CD image" load `pcsx.cfg`, then the custom file over it. A save keeps the keys this
+  build does not know (pcsx-abnxt's), writes `Bios = SET_BY_PCSX` back while the BIOS is the one it picked,
+  and puts the screen shape in as `g_scaler3` (the `-ratio` it runs with - `aspect_ratio` is no config key
+  here, and `g_scaler` means something else), which a custom file then gives back over `-ratio` without
+  touching `g_scaler`. Config files are binary both ways (Windows wrote CRLF and never read it back) and a
+  CR is cut from a string value. The first-run BIOS autoselect is gone: AutoBleem's `pcsx.cfg` has no
+  `config_save_counter`, so every menu opening put `romJP.bin` in. Tried under gdb on the Windows build: a
+  custom `g_scaler3 = 4` gives `aspect_ratio` 16:9 over `-ratio 0` with `g_scaler` left at 2, and a save
+  writes `SET_BY_PCSX`, `g_scaler3 = 4` and keeps two keys it does not know.
 
 ## Working agreements (same as autobleem-develop)
 

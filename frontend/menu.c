@@ -675,45 +675,155 @@ static char *get_cd_label(void)
 	return trimlabel;
 }
 
+/*
+ * A game's configuration has one source at a time (2026-09-24, the same in pcsx-abnxt - its
+ * frontend/ab/ab_config.h):
+ *
+ *   pcsx.cfg          AutoBleem's - the launcher's game editor writes it, launch.sh puts it in .pcsx/
+ *   pcsx.custom.cfg   the game's own, in .pcsx/ (its !SaveStates folder): every save in these menus writes
+ *                     it ("Save settings for this game"), keeping the keys it does not know (pcsx-abnxt's),
+ *                     and the launcher shows the game's settings locked while it exists - "Unlock" there
+ *                     deletes it and pcsx.cfg is the game's again
+ *
+ * pcsx.cfg is loaded first, then pcsx.custom.cfg over it (a key it lacks keeps AutoBleem's value). The
+ * screen shape, which here is the launcher's -ratio and no config key, goes into the file as g_scaler3
+ * (4:3 or full screen, as pcsx-abnxt keeps it) and comes back from it over -ratio.
+ */
+#define CUSTOM_CFG_NAME		"pcsx.custom.cfg"
+#define CONFIG_SET_BY_PCSX	"SET_BY_PCSX"
+
+static int bios_auto;			/* the BIOS came from "SET_BY_PCSX" and nobody chose another since */
+static char bios_auto_name[64];		/* ...and it is this one */
+
 static void make_cfg_fname(char *buf, size_t size, int is_game)
 {
-    switch (is_game)
-    {
-        case 1:
-            snprintf(buf, size, "." PCSX_DOT_DIR "cfg/%.32s-%.9s.cfg", get_cd_label(), CdromId);
-        break;
-        case 0:
-            snprintf(buf, size, "." PCSX_DOT_DIR "%s", cfgfile_basename);
-            break;
-        case 2:
-            snprintf(buf, size, "." PCSX_DOT_DIR "%s", "autobleem.cfg");
-            break;
-
-    }
-
-
+    /* 1 is the game's own config (see above); 2 was autobleem.cfg, the launcher's hand-off before it */
+    if (is_game)
+        snprintf(buf, size, "." PCSX_DOT_DIR "%s", CUSTOM_CFG_NAME);
+    else
+        snprintf(buf, size, "." PCSX_DOT_DIR "%s", cfgfile_basename);
 }
 
 static void keys_write_all(FILE *f);
 static char *mystrip(char *str);
 
+/* the lines of a config this build does not know - pcsx-abnxt's keys - kept when the game's own config is
+ * written again, once each */
+static int config_key_known(const char *line)
+{
+	size_t n;
+	int i;
+
+	if (strncmp(line, "bind", 4) == 0 || strncmp(line, "lastcdimg", 9) == 0)
+		return 1;	/* the key bindings are written whole */
+	for (i = 0; i < ARRAY_SIZE(config_data); i++) {
+		n = strlen(config_data[i].name);
+		if (strncmp(line, config_data[i].name, n) == 0 && strncmp(line + n, " = ", 3) == 0)
+			return 1;
+	}
+	return 0;
+}
+
+static int config_key_seen(const char *old, const char *line, size_t keylen)
+{
+	const char *p;
+
+	for (p = old; p < line; p = strchr(p, '\n') + 1) {
+		if (strncmp(p, line, keylen + 3) == 0)
+			return 1;
+		if (strchr(p, '\n') == NULL)
+			break;
+	}
+	return 0;
+}
+
+static void config_write_foreign(FILE *f, const char *old)
+{
+	const char *p, *e, *eq;
+	int len;
+
+	for (p = old; p != NULL && *p != 0; p = e != NULL ? e + 1 : NULL) {
+		e = strchr(p, '\n');
+		eq = strstr(p, " = ");
+		if (eq == NULL || (e != NULL && eq > e))
+			continue;	/* not a key = value line */
+		if (config_key_known(p) || config_key_seen(old, p, eq - p))
+			continue;
+		len = e != NULL ? (int)(e - p) : (int)strlen(p);
+		while (len > 0 && p[len - 1] == '\r')
+			len--;
+		fprintf(f, "%.*s\n", len, p);
+	}
+}
+
+static char *config_read_file(const char *path)
+{
+	FILE *f = fopen(path, "rb");
+	char *buf = NULL;
+	long size;
+
+	if (f == NULL)
+		return NULL;
+	fseek(f, 0, SEEK_END);
+	size = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	if (size > 0 && (buf = malloc(size + 1)) != NULL) {
+		if (fread(buf, 1, size, f) == (size_t)size)
+			buf[size] = 0;
+		else {
+			free(buf);
+			buf = NULL;
+		}
+	}
+	fclose(f);
+	return buf;
+}
+
+/* 1 when a config's text has "<key> = " at the start of a line */
+static int config_has_key(const char *cfg, const char *key)
+{
+	const char *p;
+	size_t n = strlen(key);
+
+	for (p = cfg; (p = strstr(p, key)) != NULL; p += n)
+		if ((p == cfg || p[-1] == '\n') && strncmp(p + n, " = ", 3) == 0)
+			return 1;
+	return 0;
+}
+
 static int menu_write_config(int is_game)
 {
 	char cfgfile[MAXPATHLEN];
+	char *old = NULL;
 	FILE *f;
 	int i;
 
 	config_save_counter++;
 
 	make_cfg_fname(cfgfile, sizeof(cfgfile), is_game);
-	f = fopen(cfgfile, "w");
+	if (is_game)
+		old = config_read_file(cfgfile);
+	/* binary: a text-mode file on Windows gets CRLF, and menu_load_config compares what fread returns
+	 * with the size in bytes */
+	f = fopen(cfgfile, "wb");
 	if (f == NULL) {
 		printf("menu_write_config: failed to open: %s\n", cfgfile);
+		free(old);
 		return -1;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(config_data); i++) {
 		fprintf(f, "%s = ", config_data[i].name);
+		/* the BIOS "SET_BY_PCSX" picked stays "SET_BY_PCSX", unless the player chose another */
+		if (config_data[i].val == Config.Bios && bios_auto && strcmp(Config.Bios, bios_auto_name) == 0) {
+			fprintf(f, "%s\n", CONFIG_SET_BY_PCSX);
+			continue;
+		}
+		/* the screen shape as the game's own: the -ratio it runs with (see above) */
+		if (is_game && config_data[i].val == &g_scaler) {
+			fprintf(f, "%x\n", aspect_ratio == ASPECT_16_9 ? SCALE_FULLSCREEN : SCALE_4_3);
+			continue;
+		}
 		switch (config_data[i].len) {
 		case 0:
 			fprintf(f, "%s\n", (char *)config_data[i].val);
@@ -734,6 +844,10 @@ static int menu_write_config(int is_game)
 		}
 	}
 
+	if (old != NULL) {
+		config_write_foreign(f, old);
+		free(old);
+	}
 	keys_write_all(f);
 	fsync(fileno(f));
 	fclose(f);
@@ -785,9 +899,7 @@ static void parse_str_val(char *cval, const char *src)
 	char *tmp;
 	strncpy(cval, src, MAXPATHLEN);
 	cval[MAXPATHLEN - 1] = 0;
-	tmp = strchr(cval, '\n');
-	if (tmp == NULL)
-		tmp = strchr(cval, '\r');
+	tmp = strpbrk(cval, "\r\n");	/* a CRLF file's CR too - "SET_BY_PCSX\r" never matched */
 	if (tmp != NULL)
 		*tmp = 0;
 }
@@ -801,9 +913,10 @@ static int menu_load_config(int is_game)
 	long size;
 	char *cfg;
 	FILE *f;
+	int scaler_before = g_scaler;
 
 	make_cfg_fname(cfgfile, sizeof(cfgfile), is_game);
-	f = fopen(cfgfile, "r");
+	f = fopen(cfgfile, "rb");	/* see menu_write_config */
 	if (f == NULL) {
 		printf("menu_load_config: failed to open: %s\n", cfgfile);
 		goto fail;
@@ -863,6 +976,11 @@ static int menu_load_config(int is_game)
 							strcpy(config_data[i].val, CONFIG_WORLD_BIOS_NAME);
 						}
 					}
+					/* a save writes "SET_BY_PCSX" back while this one is in (menu_write_config) */
+					bios_auto = 1;
+					snprintf(bios_auto_name, sizeof(bios_auto_name), "%s", (char *)config_data[i].val);
+				} else {
+					bios_auto = 0;	/* a BIOS of the file's own choosing */
 				}
 			}
 			continue;
@@ -896,6 +1014,12 @@ static int menu_load_config(int is_game)
 			tmp += 12;
 			parse_str_val(last_selected_fname, tmp);
 		}
+	}
+	/* the game's own screen shape beats the launcher's -ratio; g_scaler itself stays as it was here,
+	 * where it means something else (see make_cfg_fname) */
+	if (is_game && config_has_key(cfg, "g_scaler3")) {
+		aspect_ratio = g_scaler == SCALE_FULLSCREEN ? ASPECT_16_9 : ASPECT_4_3;
+		g_scaler = scaler_before;
 	}
 
 	keys_load_all(cfg);
@@ -1406,13 +1530,11 @@ static const char *mgn_saveloadcfg(int id, int *offs)
 
 static int mh_savecfg(int id, int keys)
 {
-    int optionFile;
-    if (id == MA_OPT_SAVECFG) optionFile = 1;
-    if (id == MA_OPT_SAVECFG_GAME) optionFile = 0;
-    if (id == MA_OPT_SAVECFG_AB) optionFile = 2;
-
-    if (menu_write_config(optionFile) == 0)
-		menu_update_msg("config saved");
+	/* every save is the game's own config (make_cfg_fname) - the three ids went to three files once,
+	 * the "for loaded game" one to the global pcsx.cfg */
+	(void)id;
+	if (menu_write_config(1) == 0)
+		menu_update_msg("saved for this game");
 	else
 		menu_update_msg("failed to write config");
 
@@ -1451,8 +1573,7 @@ static menu_entry e_menu_keyconfig[] =
 	//mee_onoff_h   ("Vibration",         MA_CTRL_VIBRATION,  in_enable_vibration, 1, h_vibration),
 	mee_range     ("Analog deadzone",   MA_CTRL_DEADZONE,   analog_deadzone, 1, 99),
 	mee_onoff_h   ("No TS Gun trigger", 0, g_opts, OPT_TSGUN_NOTRIGGER, h_notsgun),
-	mee_cust_nosave("Save AutoBleem cfg",       MA_OPT_SAVECFG_AB,      mh_savecfg, mgn_saveloadcfg),
-	mee_cust_nosave("Save cfg for loaded game", MA_OPT_SAVECFG_GAME, mh_savecfg, mgn_saveloadcfg),
+	mee_cust_nosave("Save settings for this game", MA_OPT_SAVECFG_AB, mh_savecfg, mgn_saveloadcfg),
 	mee_handler   ("Rescan devices:",  mh_input_rescan),
 	mee_label     (""),
 	mee_label_mk  (MA_CTRL_DEV_FIRST, mgn_dev_name),
@@ -1861,8 +1982,7 @@ static menu_entry e_menu_options[] =
 	mee_handler_id("[Display]",                MA_OPT_DISP_OPTS, menu_loop_gfx_options),
 	mee_handler   ("[BIOS/Plugins]",           menu_loop_plugin_options),
 	mee_handler   ("[Advanced]",               menu_loop_adv_options),
-	mee_cust_nosave("Save AutoBleem config",      MA_OPT_SAVECFG_AB,      mh_savecfg, mgn_saveloadcfg),
-	mee_cust_nosave("Save cfg for loaded game",MA_OPT_SAVECFG_GAME, mh_savecfg, mgn_saveloadcfg),
+	mee_cust_nosave("Save settings for this game", MA_OPT_SAVECFG_AB, mh_savecfg, mgn_saveloadcfg),
 	mee_handler_h ("Restore default config",   mh_restore_defaults, h_restore_def),
 	mee_end,
 };
@@ -1873,7 +1993,6 @@ static int menu_loop_options(int id, int keys)
 
 	me_enable(e_menu_options, MA_OPT_CPU_CLOCKS, cpu_clock_st > 0);
 	me_enable(e_menu_options, MA_OPT_SPU_THREAD, spu_config.iThreadAvail);
-	me_enable(e_menu_options, MA_OPT_SAVECFG_GAME, ready_to_go && CdromId[0]);
 
 	me_loop(e_menu_options, &sel);
 
@@ -2342,8 +2461,9 @@ static int romsel_run(void)
 
 	prev_gpu = gpu_plugsel;
 	prev_spu = spu_plugsel;
-	if (menu_load_config(1) != 0)
-		menu_load_config(0);
+	/* AutoBleem's pcsx.cfg, then the game's own config over it (make_cfg_fname) */
+	menu_load_config(0);
+	menu_load_config(1);
 
 	// check for plugin changes, have to repeat
 	// loading if game config changed plugins to reload them
@@ -2617,7 +2737,7 @@ static menu_entry e_menu_main3[] =
 		mee_handler_id("Toggle Filter",   MA_MAIN_FILTER,   main_menu_handler),
         mee_handler_id("Change CD image", MA_MAIN_SWAP_CD,   main_menu_handler),
         mee_handler   ("PCSX Menu",       main_menu1_handler),
-        mee_handler_id("Save AutoBleem CFG",   MA_SAVEABCONFIG,   main_menu_handler),
+        mee_handler_id("Save settings for this game", MA_SAVEABCONFIG, main_menu_handler),
         mee_handler_id("Exit",            MA_MAIN_EXIT,      main_menu_handler),
         mee_end,
 };
@@ -2658,27 +2778,14 @@ static menu_entry e_menu_main[] =
 
 void menu_loop(void)
 {
-	static int warned_about_bios = 0;
 	static int sel = 0;
 
 printf("frontend/menu.c : menu_loop()\n");
 	menu_leave_emu();
 
-	if (config_save_counter == 0) {
-		// assume first run
-		if (bioses[1] != NULL) {
-			// autoselect BIOS to make user's life easier
-			snprintf(Config.Bios, sizeof(Config.Bios), "%s", bioses[1]);
-			bios_sel = 1;
-		}
-
-		else if (!warned_about_bios) {
-//printf("menu.c : menu_bios_warn() warned_about_bios=%d\n",warned_about_bios);
-			//menu_bios_warn();
-			warned_about_bios = 1;
-		}
-
-	}
+	/* no first-run BIOS autoselect: AutoBleem always names the BIOS (pcsx.cfg's "SET_BY_PCSX", by the
+	 * disc), and the pcsx.cfg it writes has no config_save_counter - every menu opening was a "first run"
+	 * that put the folder's first BIOS, romJP.bin, in for the next boot and into a saved config */
 printf("menu.c : menu_loop() : me_enable(e_menu_main : MA_MAIN_RESUME_GAME)\n");
 printf("        g_menuscreen_w=%d g_menuscreen_h=%d\n",g_menuscreen_w,g_menuscreen_h);
 	me_enable(e_menu_main, MA_MAIN_RESUME_GAME, ready_to_go);
@@ -2879,6 +2986,7 @@ printf("menu.c : menu_init()\n");
 
 	menu_set_defconfig();
 	menu_load_config(0);
+	menu_load_config(1);	/* the game's own config over AutoBleem's, when it has one (make_cfg_fname) */
 	menu_do_last_cd_img(1);
 	last_vout_w = 320;
 	last_vout_h = 240;
