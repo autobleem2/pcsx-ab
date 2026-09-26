@@ -251,8 +251,12 @@ jobs:
   # the rolling development build: every successful build of develop replaces the assets of this repository's
   # `nightly` pre-release (autobleem-build's nightly-release action), which autobleem-appliance's nightly
   # assembly fetches the way it fetches a v* release. Never for a pull request or a tag.
+  # A manual run for some targets only (the `targets` input) would replace the nightly with a part of it,
+  # which the appliance's assembly - started by this job - cannot use: only a run of every target publishes.
   nightly:
-    if: github.ref == 'refs/heads/develop' && github.event_name != 'pull_request'
+    if: >-
+      github.ref == 'refs/heads/develop' && github.event_name != 'pull_request' &&
+      (github.event_name != 'workflow_dispatch' || inputs.targets == '')
     needs: [plan, package]
     runs-on: ubuntu-24.04
     permissions: { contents: write }
