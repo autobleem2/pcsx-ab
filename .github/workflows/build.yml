@@ -251,18 +251,33 @@ jobs:
   # the rolling development build: every successful build of develop replaces the assets of this repository's
   # `nightly` pre-release (autobleem-build's nightly-release action), which autobleem-appliance's nightly
   # assembly fetches the way it fetches a v* release. Never for a pull request or a tag.
+  # A manual run for some targets only (the `targets` input) would replace the nightly with a part of it,
+  # which the appliance's assembly - started by this job - cannot use: only a run of every target publishes.
   nightly:
-    if: github.ref == 'refs/heads/develop' && github.event_name != 'pull_request'
+    if: >-
+      github.ref == 'refs/heads/develop' && github.event_name != 'pull_request' &&
+      (github.event_name != 'workflow_dispatch' || inputs.targets == '')
     needs: [plan, package]
     runs-on: ubuntu-24.04
     permissions: { contents: write }
     steps:
       - uses: actions/download-artifact@v8
         with: { name: packages, path: out }
+      # the admin App's token, so the new nightly starts autobleem-appliance's assembly at once (a repository
+      # without AB_ADMIN_APP_ID skips this, and the appliance's schedule assembles it instead)
+      - id: app
+        if: vars.AB_ADMIN_APP_ID != ''
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.AB_ADMIN_APP_ID }}
+          private-key: ${{ secrets.AB_ADMIN_APP_KEY }}
+          owner: autobleem2
+          repositories: autobleem-appliance
       - uses: autobleem2/autobleem-build/.github/actions/nightly-release@develop
         with:
           files: out/*
           version: ${{ needs.plan.outputs.version }}
+          dispatch-token: ${{ steps.app.outputs.token }}
 
   # publish emu/pcsx-ab/ to the download site. Self-hosted only (the site is the build server's disk); runs
   # on a v* tag or a manual run with publish=true, never on a PR. Uses the launcher repo's repo_publish.sh.
