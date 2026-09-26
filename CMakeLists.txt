@@ -183,6 +183,7 @@ set(PCSXAB_SOURCES
     frontend/libpicofe/plat_sdl.c frontend/libpicofe/plat_dummy.c
     frontend/plat_sdl.c
     frontend/plugin_lib.c
+    frontend/ab_pad_battery.c
     frontend/libpicofe/readpng.c frontend/libpicofe/fonts.c
     frontend/menu.c frontend/libpicofe/input.c
     frontend/main.c frontend/plugin.c

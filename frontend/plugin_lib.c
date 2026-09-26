@@ -35,6 +35,7 @@
 #include "../libpcsxcore/misc.h"
 #include "../plugins/dfinput/externals.h"
 #include "../libpcsxcore/title.h"
+#include "ab_pad_battery.h"
 
 #define HUD_HEIGHT 10
 
@@ -202,6 +203,78 @@ static __attribute__((noinline)) void draw_active_chans(int vout_w, int vout_h)
 	}
 }
 
+// E15: a tiny battery icon in the top-right corner, only while ab_pad_battery says a wireless pad is low
+// (see ab_pad_battery.h for why this fork never sets its show-on-demand request) - outline + a proportional
+// fill, no font needed. Same corner every frame it shows, drawn straight into the RGB565 frame like
+// draw_active_chans above.
+#define AB_BATTERY_ICON_W 22
+#define AB_BATTERY_ICON_H 11
+#define AB_BATTERY_NUB_W  2
+#define AB_BATTERY_MARGIN 6
+// RGB565: red (<= the low threshold), amber (<= half), green (a healthy percent, only ever seen on a
+// plain show-request - the icon never shows green on its own)
+#define AB_RGB565_BATTERY_LOW 0xf800
+#define AB_RGB565_BATTERY_MED 0xfd20
+#define AB_RGB565_BATTERY_OK  0x07e0
+
+static void battery_set(unsigned short *fb, int vout_w, int vout_h, int x, int y, unsigned short rgb565)
+{
+	if ((unsigned)x >= (unsigned)vout_w || (unsigned)y >= (unsigned)vout_h)
+		return;
+	fb[y * vout_w + x] = rgb565;
+}
+
+static void battery_fill(unsigned short *fb, int vout_w, int vout_h, int x0, int y0, int x1, int y1,
+	unsigned short rgb565)
+{
+	int x, y;
+	for (y = y0; y < y1; y++)
+		for (x = x0; x < x1; x++)
+			battery_set(fb, vout_w, vout_h, x, y, rgb565);
+}
+
+static void draw_pad_battery_icon(int vout_w, int vout_h)
+{
+	int percent, ox, oy, bw, bh, nub_x0, nub_y0, nub_y1, fill_w;
+	unsigned short outline = 0xffff, backing = 0x0000, fill_color;
+
+	if (pl_vout_buf == NULL || pl_vout_bpp != 16 || !ab_pad_battery_visible())
+		return;
+
+	percent = ab_pad_battery_percent();
+	if (percent < 0)
+		return;
+
+	bw = AB_BATTERY_ICON_W;
+	bh = AB_BATTERY_ICON_H;
+	ox = vout_w - AB_BATTERY_MARGIN - bw - AB_BATTERY_NUB_W;
+	oy = AB_BATTERY_MARGIN;
+
+	fill_color = percent <= AB_PAD_BATTERY_LOW_PERCENT ? AB_RGB565_BATTERY_LOW :
+		     percent <= 50 ? AB_RGB565_BATTERY_MED : AB_RGB565_BATTERY_OK;
+
+	// a solid backing so the outline reads over a bright game frame, then the outline itself
+	battery_fill((unsigned short *)pl_vout_buf, vout_w, vout_h, ox - 1, oy - 1, ox + bw + AB_BATTERY_NUB_W + 1,
+		oy + bh + 1, backing);
+	battery_fill((unsigned short *)pl_vout_buf, vout_w, vout_h, ox, oy, ox + bw, oy + 1, outline);
+	battery_fill((unsigned short *)pl_vout_buf, vout_w, vout_h, ox, oy + bh - 1, ox + bw, oy + bh, outline);
+	battery_fill((unsigned short *)pl_vout_buf, vout_w, vout_h, ox, oy, ox + 1, oy + bh, outline);
+	battery_fill((unsigned short *)pl_vout_buf, vout_w, vout_h, ox + bw - 1, oy, ox + bw, oy + bh, outline);
+
+	// the nub on the right, a third of the body's height, centred
+	nub_x0 = ox + bw;
+	nub_y0 = oy + bh / 3;
+	nub_y1 = oy + bh - bh / 3;
+	battery_fill((unsigned short *)pl_vout_buf, vout_w, vout_h, nub_x0, nub_y0, nub_x0 + AB_BATTERY_NUB_W,
+		nub_y1, outline);
+
+	// the fill itself, proportional to the percent, inset one pixel inside the outline
+	fill_w = (bw - 4) * percent / 100;
+	if (fill_w > 0)
+		battery_fill((unsigned short *)pl_vout_buf, vout_w, vout_h, ox + 2, oy + 2, ox + 2 + fill_w,
+			oy + bh - 2, fill_color);
+}
+
 static void print_hud(int w, int h, int xborder)
 {
 	if (h < 16)
@@ -211,6 +284,10 @@ static void print_hud(int w, int h, int xborder)
 		xborder += (pl_vout_w - w) / 2;
 	if (h > pl_vout_h)
 		h = pl_vout_h;
+
+	// E15: polled at most once every AB_PAD_BATTERY_POLL_MS internally - cheap to call every frame
+	ab_pad_battery_tick(plat_get_ticks_ms());
+	draw_pad_battery_icon(pl_vout_w, pl_vout_h);
 
 	if (g_opts & OPT_SHOWSPU)
 		draw_active_chans(w, h);
