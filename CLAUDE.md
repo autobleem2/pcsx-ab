@@ -116,6 +116,23 @@ Only the cards in use are created (no `card2.mcd`, which is "none"). Not yet run
 With an exit dir `filename.txt` is written at the exit only (not at start as well), and
 `lastcdimg.txt` goes with it.
 
+## Pad battery overlay (2026-09-27, E15)
+
+A tiny outline+fill battery icon in the game's top-right corner, shown only while a wireless pad's battery
+is at or under 15% - the pcsx-ab half of the feature pcsx-abnxt already has (its `frontend/ab/ab_pad_battery.*`,
+E15). `frontend/ab_pad_battery.c`/`.h` are the same C reader byte-for-byte (this fork has no `frontend/ab/`
+subdirectory, so they sit next to `ab_env.h` instead): the same two sysfs folder-name prefixes
+(`sony_controller_battery_`/`ps-controller-battery-`), the same `capacity_level` mapping, the same 15%/25%
+low/reset thresholds, the same `AB_PAD_BATTERY_DIR` override. Polled at most once every 5 seconds from
+`plugin_lib.c`'s `print_hud()` - this fork's once-a-frame HUD draw, called right before the frame buffer is
+flipped; there is no `ab_frame_tick()`-shaped hook here like pcsx-abnxt's. **One deliberate behavioural gap**:
+this fork has no "hold the menu button" gesture to hang a show-on-demand check on (its menu button opens the
+menu immediately on press, no hold), so `ab_pad_battery_set_show_requested()` is kept for API parity but
+nothing calls it - the icon only ever shows because a pad is latched low, never on demand. `frontend/test_pad_battery.c`
+is the same standalone smoke test as pcsx-abnxt's (`gcc -o test_pad_battery ab_pad_battery.c test_pad_battery.c`
+from `frontend/`, no CMake target). See `E:\Programming\_work-planned\e15\TEST-e15-pcsx-ab.md` for the full
+test notes and what else differs from the abnxt half.
+
 ## Things learned the hard way
 
 - **GCC 14 vs Sony's GCC 8**: `-fcommon` is required (tentative definitions in headers, `.comm` in
