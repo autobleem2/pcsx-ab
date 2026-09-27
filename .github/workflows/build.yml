@@ -22,8 +22,11 @@ on:
     branches: [develop, master]
   workflow_dispatch:
     inputs:
+      # No longer decides where the Linux matrix build lands (see the `route`/`route_runner` jobs
+      # below, autobleem-build's route.yml) - kept only because the `publish` job's `if:` still
+      # reads it (inputs.runner != 'github'), unchanged from before this routing change.
       runner:
-        description: where to build the Linux targets
+        description: where to publish (the Linux build itself is now routed automatically)
         type: choice
         options: [github, self-hosted]
         default: github
@@ -33,6 +36,10 @@ on:
         default: ''
       publish:
         description: publish the packages to the site under emu/pcsx-ab/ (self-hosted only)
+        type: boolean
+        default: false
+      force_fallback:
+        description: test-only - force the Linux build job onto ubuntu-24.04 (see autobleem-build's route.yml)
         type: boolean
         default: false
 
@@ -71,15 +78,38 @@ jobs:
             echo "version=$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           fi
 
+  # Which runner the build job below uses: the laptop when it is online, else ubuntu-24.04 - see
+  # autobleem-build's route.yml for the full order and every fallback (always hosted for a PR).
+  route:
+    if: vars.AB_CI_ENABLED == 'true'
+    uses: autobleem2/autobleem-build/.github/workflows/route.yml@develop
+    with:
+      force_fallback: ${{ inputs.force_fallback == true }}
+    secrets: inherit
+
+  # A job whose type is `uses: <reusable workflow>` cannot have its outputs read by a downstream
+  # job's `runs-on:` directly (GitHub rejects needs.route.outputs.* there at parse time) - this
+  # plain job re-exports route's output so build's runs-on can see it.
+  route_runner:
+    needs: route
+    if: vars.AB_CI_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      runs_on: ${{ needs.route.outputs.runs_on }}
+    steps:
+      - run: echo "routed to ${{ needs.route.outputs.runner }}"
+
   build:
     name: ${{ matrix.target }}
-    needs: plan
+    needs: [plan, route_runner]
     if: needs.plan.outputs.targets != '[]'
     strategy:
       fail-fast: false
       matrix:
         target: ${{ fromJSON(needs.plan.outputs.targets) }}
-    runs-on: ${{ (github.event_name != 'pull_request' && inputs.runner == 'self-hosted') && 'self-hosted' || 'ubuntu-24.04' }}
+    runs-on: ${{ fromJSON(needs.route_runner.outputs.runs_on) }}
+    timeout-minutes: 30
     container:
       image: ghcr.io/autobleem2/autobleem-build:${{ startsWith(github.ref, 'refs/tags/v') && 'latest' || 'develop' }}
       credentials:
