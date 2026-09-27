@@ -5,19 +5,27 @@ ported to the Raspberry Pi to run under autobleem-develop's Pi port. This file i
 record; keep it current in the same commit as any change it describes. Git history has the reasoning per
 change (commit messages are prose).
 
-## State (2026-09-17)
+## State (2026-09-27)
+
+**pcsx-ab is no longer developed** (the owner, 2026-09-27, in console session 318 - autobleem-main's
+`docs/decisions.md`): it is retired over time, and **pcsx-abnxt is the PS1 emulator where everything has to
+work**. New features, fixes and console checks go to pcsx-abnxt only; a pcsx-ab-only bug or missing feature
+is not fixed (it stays shipped until EMU-2 archives it - when is still the owner's call). CI still builds
+every push for regression coverage (`.github/workflows/build.yml`), but publishing to the download site is
+**tag releases only** (`v*` tags; `publish` is self-hosted, tag-or-manual) - there is no rolling `develop`
+publish the way pcsx-abnxt has.
 
 | | |
 |---|---|
 | Build system | CMake + Ninja (`CMakeLists.txt`); upstream `configure`/Makefiles deleted |
-| Raspberry Pi cross build | `./make_rpi.sh` -> `build_rpi/dist/` - builds, links, **never run on a Pi** |
-| Raspberry Pi 64-bit cross build | `./make_rpi64.sh` -> `build_rpi64/dist/` - interpreter + peops GPU (no aarch64 dynarec/NEON in this fork), **builds clean (verified 2026-09-19, real aarch64 ELF), never run on a Pi** |
+| Raspberry Pi cross build | `./make_rpi.sh` -> `build_rpi/dist/` - builds, links; not run on real Pi hardware |
+| Raspberry Pi 64-bit cross build | `./make_rpi64.sh` -> `build_rpi64/dist/` - interpreter + peops GPU (no aarch64 dynarec/NEON in this fork), builds clean (real aarch64 ELF); not run on real Pi hardware |
 | Windows dev build | `./make_win.sh` -> `build_win/pcsx-ab.exe` - runs games (interpreter, peops GPU) |
-| PlayStation Classic | `./make_psc.sh` -> `build_psc/dist/` via the build server - builds and links with the GLES/Wayland path; **not yet run on a console** |
-| Video on the Pi | SDL2 renderer + streaming texture (`plat_sdl_present`), no Wayland/GLES - proven on Windows |
+| PlayStation Classic | `./make_psc.sh` -> `build_psc/dist/` via the build server - builds and links with the GLES/Wayland path; **runs on real console hardware** (GLES on Weston) - it is the emulator AutoBleem 2 ships (README's "Status") |
+| Video on the Pi | SDL2 renderer + streaming texture (`plat_sdl_present`), no Wayland/GLES - proven on Windows, not on a real Pi |
 | Gamepad | SDL2 GameController driver (`in_sdl2gc.c`) - proven on Windows with an Xbox pad |
-| CHD images | `handlechd`/`cdread_chd` over vendored static libchdr (upstream, with zstd - the same tree as autobleem-develop's) - frame-exact vs bins; CDDA-by-ear untested |
-| Not started | `dist/` folder (rpi + win32 binaries + plugins in AutoBleem's `emu/` layout); AutoBleem's own Windows launch support |
+| CHD images | `handlechd`/`cdread_chd` over vendored static libchdr (upstream, with zstd - the same tree as autobleem-develop's) - frame-exact vs bins; CDDA-by-ear untested (autobleem-main `docs/todo.md`, EMU-8) |
+| Packaging | `tools/make_packages.sh` builds the per-target zips (rpi/rpi64/pcusb/psc/win) from `ci/build.sh`'s output; `publish` ships them to `emu/pcsx-ab/` on a `v*` tag |
 
 ## Decisions (made by the owner - do not re-ask)
 

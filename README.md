@@ -106,7 +106,10 @@ LZMA-SDK codecs, and header-only FLAC), built static so no extra library is need
 (GLES on Weston) and the Raspberry Pi (SDL2 renderer); the Windows/PC build runs games through the
 interpreter for development. Continuous integration (`.github/workflows/build.yml`) builds the four cross
 targets - `psc`, `rpi`, `rpi64`, `pcusb` - in AutoBleem's shared toolchain image and a native Windows build
-on GitHub Actions, and packages each for AutoBleem's download site.
+on GitHub Actions, and packages each for AutoBleem's download site. **pcsx-ab is no longer developed**
+(2026-09-27): pcsx-abnxt is now the PS1 emulator where new features, fixes and console checks go, and
+releases here are tag releases only (`v*`) - CI still builds every push for regression coverage, but there
+is no rolling `develop` publish.
 
 PCSX ReARMed is yet another PCSX fork based on the PCSX-Reloaded project,
 which itself contains code from PCSX, PCSX-df and PCSX-Revolution. This
