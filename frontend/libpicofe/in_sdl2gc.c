@@ -16,6 +16,7 @@
 #include "input.h"
 #include "in_sdl2gc.h"
 #include "vector.h"
+#include "../ab_env.h" /* C11: ab_pad_order() - AB_PAD_ORDER, a positional swap of the first two pads' PS1 ports */
 
 #if SDL_MAJOR_VERSION == 2
 // Game Controller API only on SDL2
@@ -319,6 +320,11 @@ static void in_sdl2gc_probe(const in_drv_t *drv) {
     VECTOR_INIT(gamepads);
     const char *const *key_names = in_sdl2gc_keys;
     struct in_sdl2gc_state *state;
+    /* C11: Options -> "Swap Player 1 / Player 2" - pad_order[i] is the PS1 port (0-based) the i'th
+     * accepted controller lands on; {0, 1} (AB_PAD_ORDER unset, or this build's abfeatures never offered
+     * "padorder") is the original, unswapped order. */
+    int pad_order[2];
+    ab_pad_order(pad_order);
 
     char system_db[] = "/etc/autobleem/gamecontrollerdb.txt";
     char ab_db[] = "/media/Autobleem/bin/autobleem/gamecontrollerdb.txt";
@@ -413,7 +419,11 @@ static void in_sdl2gc_probe(const in_drv_t *drv) {
         state->dev_id = dev_id;
 
         // map analogue to first controller (add second analogue after input/pluginlib fix)
-        if (numControllers == 0) {
+        // C11: pad_order[] is a purely positional swap of the first two pads' PS1 ports - {0, 1} (no
+        // AB_PAD_ORDER, or this build's abfeatures never offered "padorder") behaves exactly as the
+        // original numControllers == 0 / else split below; a third+ pad is never affected by it.
+        int port = (numControllers < 2) ? pad_order[numControllers] : 1;
+        if (port == 0) {
             in_adev[0] = dev_id;
             in_adev[1] = dev_id;
         } else
@@ -423,7 +433,7 @@ static void in_sdl2gc_probe(const in_drv_t *drv) {
         }
 
         numControllers++;
-        state->player = numControllers;
+        state->player = (numControllers <= 2) ? port + 1 : numControllers;
 
         VECTOR_ADD(gamepads, state);
         // do not probe more than 2 players (4 pads not supported in emu)
