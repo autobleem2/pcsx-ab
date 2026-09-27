@@ -322,10 +322,13 @@ static void in_sdl2gc_probe(const in_drv_t *drv) {
     struct in_sdl2gc_state *state;
     /* C11: Options -> "Swap Player 1 / Player 2" - pad_order[i] is the PS1 port (0-based) the i'th
      * accepted controller lands on; {0, 1} (AB_PAD_ORDER unset, or this build's abfeatures never offered
-     * "padorder") is the original, unswapped order. */
-    int pad_order[2];
-    ab_pad_order(pad_order);
-
+     * "padorder") is the original, unswapped order. Review fix (Marcus): the swap only takes effect with
+     * two or more pads about to be accepted - a lone pad must always land on PS1 port 1 (player 1), swap
+     * on or off, so counted below before the assignment loop runs; the count mirrors what that loop itself
+     * accepts (SDL_IsGameController, capped at 2 - the emulator never uses a third pad's port anyway). This
+     * runs on every hot-plug re-probe too: unplugging one of two pads mid-game drops the count to 1 and
+     * un-swaps the remaining pad onto port 1. */
+    int pad_order[2] = { 0, 1 };
     char system_db[] = "/etc/autobleem/gamecontrollerdb.txt";
     char ab_db[] = "/media/Autobleem/bin/autobleem/gamecontrollerdb.txt";
     char local_db[] = "gamecontrollerdb.txt";
@@ -356,6 +359,18 @@ static void in_sdl2gc_probe(const in_drv_t *drv) {
     probed_joysticks = SDL_NumJoysticks();
     printf(IN_SDL2GC_PREFIX "Scanning %d joysticks....\n", probed_joysticks);
     int numControllers = 0;
+
+    /* C11 review fix: how many pads the loop below is about to accept, capped at 2 - the swap is only
+     * asked for (ab_pad_order()) when that count is 2, leaving pad_order at the identity {0, 1} otherwise */
+    {
+        int acceptedCount = 0;
+        for (int idx = 0; idx < probed_joysticks && acceptedCount < 2; idx++) {
+            if (SDL_IsGameController(idx))
+                acceptedCount++;
+        }
+        if (acceptedCount >= 2)
+            ab_pad_order(pad_order);
+    }
 
     // override settings
     in_adev[0] = -1;

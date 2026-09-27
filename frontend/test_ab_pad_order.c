@@ -29,6 +29,17 @@ static void expect(int cond, const char *what)
 	}
 }
 
+/* mirrors in_sdl2gc_probe()'s gate (Marcus's review fix): the swap only takes effect with two or more
+ * pads about to be accepted - with fewer, the identity order is forced regardless of AB_PAD_ORDER, so a
+ * lone pad is always player 1. Keep this in step with in_sdl2gc.c's in_sdl2gc_probe() too. */
+static void effective_pad_order(int acceptedCount, int order[2])
+{
+	order[0] = 0;
+	order[1] = 1;
+	if (acceptedCount >= 2)
+		ab_pad_order(order);
+}
+
 static void set_env(const char *value)
 {
 #ifdef _WIN32
@@ -95,6 +106,24 @@ int main(void)
 	set_env("1,0,extra");
 	ab_pad_order(order);
 	expect(order[0] == 1 && order[1] == 0, "\"1,0,extra\": trailing text ignored, swapped order {1, 0}");
+
+	/* 9) Marcus's review fix: the swap only takes effect with two or more pads about to be accepted */
+	set_env("1,0");
+	effective_pad_order(0, order);
+	expect(order[0] == 0 && order[1] == 1, "0 pads, swap requested: identity order (nothing to swap)");
+
+	effective_pad_order(1, order);
+	expect(order[0] == 0 && order[1] == 1, "1 pad, swap requested: identity order - a lone pad stays player 1");
+
+	effective_pad_order(2, order);
+	expect(order[0] == 1 && order[1] == 0, "2 pads, swap requested: swapped order");
+
+	effective_pad_order(3, order);
+	expect(order[0] == 1 && order[1] == 0, "3 pads, swap requested: swapped order (still applies)");
+
+	set_env(NULL);
+	effective_pad_order(2, order);
+	expect(order[0] == 0 && order[1] == 1, "2 pads, no swap requested: identity order");
 
 	printf(failures == 0 ? "\nAll tests passed.\n" : "\n%d test(s) FAILED.\n", failures);
 	return failures == 0 ? 0 : 1;
